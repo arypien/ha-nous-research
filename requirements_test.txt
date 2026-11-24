@@ -1,0 +1,5 @@
+pytest-homeassistant-custom-component
+pytest
+pytest-asyncio
+aioresponses
+syrupy

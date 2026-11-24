@@ -1,0 +1,22 @@
+{
+  "domain": "nous_research",
+  "name": "Nous Research",
+  "codeowners": [
+    "@arypien"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "conversation",
+    "http"
+  ],
+  "after_dependencies": [
+    "ai_task",
+    "recorder"
+  ],
+  "documentation": "https://github.com/arypien/ha-nous-research",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/arypien/ha-nous-research/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

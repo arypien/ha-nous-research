@@ -1,0 +1,236 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/banner-dark.png">
+    <img alt="Nous Research for Home Assistant" src="images/banner-light.png" width="760">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="https://github.com/hacs/integration"><img alt="HACS custom repository" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
+  <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
+  <img alt="Tests" src="https://img.shields.io/badge/tests-68%20passing-3DA639.svg?style=flat-square">
+  <img alt="Translations" src="https://img.shields.io/badge/i18n-EN%20%7C%20PL-8A63D2.svg?style=flat-square">
+</p>
+
+<p align="center"><b>English</b> · <a href="README.pl.md">Polski</a></p>
+
+Conversation agent, AI Task entity and local cost tracking for the
+[Nous Research](https://nousresearch.com) inference API. Hermes 4 and DeepHermes
+models get real Home Assistant control through Assist, plus honest accounting of
+tokens and spend computed on your own instance.
+
+> Unofficial community integration. Not affiliated with Nous Research — API usage
+> is billed by them under their own terms.
+
+## Features
+
+- **Conversation agent** — streaming replies, Assist tool calling, up to six tool
+  rounds per answer.
+- **AI Task entity** — structured generation through `ai_task.generate_data`, the
+  payload comes back in `data`, ready for automations.
+- **Hermes 4 reasoning modes** — the documented thinking prompt or an opening
+  `think` tag prefill.
+- **Cost tracking** — today / 7 days / 30 days / total, token and request counters,
+  optional monthly budget, all stored locally.
+- **Live model catalog** — prices, context lengths and modalities straight from
+  `/v1/models`; the chat model is validated against it.
+- **Long-term statistics** — cost sensors push `total` statistics, so history
+  survives recorder purges and works in Statistics Graph cards.
+- **Bilingual UI** — English and Polish, with a
+  [translation guide](docs/TRANSLATING.md).
+
+## Installation
+
+### HACS (recommended)
+
+1. HACS → **Integrations** → ⋮ → **Custom repositories**.
+2. Add `https://github.com/arypien/ha-nous-research`, category **Integration**.
+3. Search for **Nous Research** in HACS and install it.
+4. Restart Home Assistant.
+
+### Manual
+
+Copy `custom_components/nous_research` from the release ZIP into
+`config/custom_components/` and restart Home Assistant.
+
+Requires **Home Assistant 2026.9.0 or newer** and an API key from
+<https://portal.nousresearch.com>.
+
+## Configuration
+
+1. Create an API key in the Nous portal.
+2. **Settings → Devices & services → Add integration → Nous Research**.
+3. Paste the key — the catalog is fetched and validated with a one-token request,
+   so a revoked key fails immediately instead of at first use.
+4. Pick the chat model from the list the API reports (searchable dropdown, free
+   text allowed).
+
+| Field | Meaning |
+| --- | --- |
+| API key | Bearer token from the portal, stored in the config entry |
+| Base URL | Defaults to `https://inference-api.nousresearch.com/v1` |
+| Name | Entry name, also the prefix of the created entities |
+| Model | Chosen in the second step from the live `/models` catalog |
+
+No model id is hardcoded: the catalog is aggregated and namespaced
+(`vendor/model`, ~300 chat models), so both the list and its default come from the
+API. Batch endpoints (`:batch`), embeddings, TTS and image-only models are filtered
+out. If a stored model id disappears from the catalog, the integration falls back to
+the catalog default and raises a repair issue asking you to pick a model again —
+instead of failing every request.
+
+### Options
+
+**Configure** on the entry covers the system prompt, exposed HA API, model,
+`max_tokens`, `temperature`, reasoning mode, cost sensors, budget and catalog
+refresh interval.
+
+## Reasoning modes
+
+Nous documents a specific system prompt to unlock long chains of thought. The modes
+differ only in how it is triggered:
+
+- **Off** — no thinking, lowest latency and cost.
+- **System prompt** (default, recommended for Hermes 4) — sent as a system message
+  next to your own prompt:
+
+  > You are a deep thinking AI, you may use extremely long chains of thought to
+  > deeply consider the problem and deliberate with yourself via systematic
+  > reasoning processes to help you come to a correct solution prior to answering.
+  > You should enclose your thoughts and internal monologue inside `think` tags,
+  > and then provide your solution or response to the problem.
+
+- **Prefill think tag** — the assistant turn is prefilled with an opening think
+  tag, so the model continues inside it without the extra prompt. Cheaper,
+  slightly less reliable on small models.
+
+Thinking tokens count towards `max_tokens`; raise it if replies are truncated.
+
+## Tool calling / Assist
+
+**Home Assistant control** = `assist` exposes the Assist tools (`GetLiveContext`,
+`HassTurnOn`, `HassTurnOff`, `HassLightSet`, `HassClimateSetTemperature`, …) to the
+model. `conversation` additionally registers the agent for the Assist dialog. The
+agent loops up to six tool rounds before answering.
+
+## AI Task
+
+```yaml
+action: ai_task.generate_data
+data:
+  task_name: Evening summary
+  entity_id: ai_task.nous_research_ai_task
+  instructions: >-
+    Summarise the state of the house in three short bullet points.
+    Mention open windows and lights that are still on.
+  structure:
+    summary:
+      description: One-line summary
+      required: true
+    anomalies:
+      description: Unusual readings, empty string if none
+```
+
+The structured payload comes back in `data`, ready to use in automations.
+
+## Sensors
+
+| Entity | State |
+| --- | --- |
+| `sensor.*_cost_total` | Cumulative spend in USD |
+| `sensor.*_cost_today` / `_cost_7d` / `_cost_30d` | Spend per window |
+| `sensor.*_budget_remaining` | Budget minus this month's spend |
+| `sensor.*_tokens_in_total` / `_tokens_out_total` | Prompt / completion tokens |
+| `sensor.*_requests_total` | Successful requests |
+| `sensor.*_top_model_today` | Most used model today |
+| `sensor.*_last_request` | Model, tokens and cost of the last call |
+| `sensor.*_catalog_models` | Number of models in the catalog |
+| `sensor.*_selected_model_input_price` | Prompt price per 1M tokens |
+| `sensor.*_selected_model_output_price` | Completion price per 1M tokens |
+
+Prices are USD per 1M tokens, rendered without padding zeros: the portal value
+`$0.03 / 1M` shows up as `0.03`, not `0.0300`.
+
+### No balance sensor
+
+The inference API has no balance endpoint — `/v1/balance`, `/v1/credits`,
+`/v1/usage`, `/v1/billing/*` and the portal equivalents all answer `404`, and the
+API key unlocks only `/v1/models` and the completion endpoints. A balance sensor
+could therefore only show a local guess derived from your own spending, which is why
+this integration does not ship one: check the real figure in the Nous Portal, and use
+the cost sensors here for what Home Assistant can actually know (spend per day, per
+model, tokens, budget).
+
+### Long-term statistics
+
+Cost sensors push `total` statistics, so history survives recorder purges and works
+in **Statistics graph** cards. Pushes are throttled to once per minute.
+
+## Services
+
+| Service | Fields | Description |
+| --- | --- | --- |
+| `nous_research.reset_usage` | `entry_id` | Clears local cost and token counters |
+
+`entry_id` is optional when a single entry is configured.
+
+## Example automation
+
+```yaml
+automation:
+  - alias: Daily Nous spend report
+    triggers:
+      - trigger: time
+        at: "21:00:00"
+    actions:
+      - action: notify.persistent_notification
+        data:
+          title: Nous Research
+          message: >-
+            Today: ${{ states('sensor.nous_research_cost_today') }} ·
+            {{ states('sensor.nous_research_requests_total') }} requests ·
+            top model {{ states('sensor.nous_research_top_model_today') }}
+```
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `401` / `403` | Key revoked or copied with whitespace — HA offers a reauth flow |
+| `402` / no credits | Top up at the portal, requests are rejected until then |
+| `429` | Rate limit — back off or slow down automations calling the agent |
+| Custom model rejected | The id is not in the catalog; pick one from the list |
+| Empty or truncated replies | Thinking used the whole `max_tokens`; raise it or set reasoning to **Off** |
+| Generic entity names | Stale translation cache — restart HA after updating the integration |
+
+Enable debug logs when reporting an issue:
+
+```yaml
+logger:
+  logs:
+    custom_components.nous_research: debug
+```
+
+## Privacy
+
+The API key lives in the Home Assistant config entry and is only sent to the
+configured base URL. Cost and token counters are computed and stored locally —
+nothing is uploaded anywhere else. Diagnostics redact the key.
+
+## Development
+
+```bash
+python -m venv .venv && . .venv/bin/activate
+pip install -r requirements_test.txt
+pytest -q                                      # 68 tests, offline
+python tools/check_translations.py --strict    # en/pl key parity
+```
+
+The suite boots a real `hass` instance through
+`pytest-homeassistant-custom-component` and mocks HTTP with `aioresponses`, so it
+needs no network and no real API key.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright 2026 arypien.

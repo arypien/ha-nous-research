@@ -1,0 +1,16 @@
+reset_usage:
+  name: Reset usage
+  description: >-
+    Clear the locally stored token counters and cost totals of the Nous Research
+    cost tracker. Historical daily data is discarded and the sensors are reset to
+    zero. This does not change anything on the Nous Research account.
+  fields:
+    entry_id:
+      name: Config entry
+      description: >-
+        Optional config entry id to target. Defaults to the first loaded Nous
+        Research config entry.
+      required: false
+      example: 01J8Z3K4M5N6P7Q8R9S0T1U2V3
+      selector:
+        text:

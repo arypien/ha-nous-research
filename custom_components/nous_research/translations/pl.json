@@ -1,0 +1,181 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nous Research",
+        "description": "Połącz Home Assistant z API inferencji Nous Research. Utwórz klucz API na portal.nousresearch.com i wklej go poniżej.",
+        "data": {
+          "api_key": "Klucz API",
+          "base_url": "Adres bazowy",
+          "name": "Nazwa"
+        },
+        "data_description": {
+          "api_key": "Klucz z portal.nousresearch.com. Wysyłany jako token Bearer i zapisywany we wpisie konfiguracji.",
+          "base_url": "Endpoint zgodny z OpenAI. Zostaw domyślny, chyba że kierujesz ruch przez proxy.",
+          "name": "Nazwa tego wpisu integracji."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ponowne uwierzytelnienie Nous Research",
+        "description": "API odrzuciło klucz. Podaj nowy klucz z portal.nousresearch.com.",
+        "data": {
+          "api_key": "Klucz API"
+        }
+      },
+      "model": {
+        "title": "Wybierz model",
+        "description": "Wybierz model czatu dla tego wpisu. Lista pochodzi z katalogu modeli skonfigurowanego endpointu; możesz też wkleić dowolny inny identyfikator modelu.",
+        "data": {
+          "chat_model": "Model"
+        },
+        "data_description": {
+          "chat_model": "Identyfikator modelu dokładnie jak w /v1/models, np. vendor/nazwa-modelu."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Ten klucz API jest już skonfigurowany."
+    },
+    "error": {
+      "invalid_auth": "Nieprawidłowy klucz API.",
+      "no_credits": "Konto nie ma już środków.",
+      "rate_limited": "Osiągnięto limit zapytań. Spróbuj ponownie za chwilę.",
+      "cannot_connect": "Brak połączenia z API Nous Research.",
+      "unknown": "Nieoczekiwany błąd.",
+      "invalid_url": "Nieprawidłowy adres API.",
+      "model_required": "Wybierz model z listy lub wklej identyfikator modelu."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Nous Research",
+        "description": "Dostosuj zachowanie agenta, śledzenie kosztów i odświeżanie katalogu.",
+        "data": {
+          "prompt": "Prompt systemowy",
+          "llm_hass_api": "Sterowanie Home Assistant",
+          "chat_model": "Model",
+          "max_tokens": "Maks. tokenów",
+          "temperature": "Temperatura",
+          "reasoning_mode": "Tryb rozumowania",
+          "cost_sensors": "Czujniki kosztów",
+          "budget_usd": "Budżet (USD)",
+          "catalog_interval": "Odświeżanie katalogu (godziny)"
+        },
+        "data_description": {
+          "prompt": "Instrukcje dodawane do każdej rozmowy. Puste pole oznacza wbudowany prompt asystenta.",
+          "llm_hass_api": "Udostępnia modelowi encje i usługi Home Assistant jako narzędzia.",
+          "chat_model": "Model używany w nowych rozmowach. Istniejące encje zachowują model do przeładowania.",
+          "max_tokens": "Górny limit odpowiedzi, razem z tokenami rozumowania.",
+          "temperature": "Temperatura próbkowania. Wartości 0.2-0.5 sprawdzają się w zadaniach sterowania.",
+          "reasoning_mode": "Sposób wyzwalania rozumowania. Dokładny prompt opisano w README.",
+          "cost_sensors": "Twórz czujniki kosztów i tokenów dla tego wpisu.",
+          "budget_usd": "Budżet miesięczny dla czujnika pozostałego budżetu. 0 wyłącza czujnik.",
+          "catalog_interval": "Jak często odświeżać katalog modeli i ceny."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cost_total": {
+        "name": "Koszt całkowity"
+      },
+      "cost_today": {
+        "name": "Koszt dzisiaj"
+      },
+      "cost_7d": {
+        "name": "Koszt z 7 dni"
+      },
+      "cost_30d": {
+        "name": "Koszt z 30 dni"
+      },
+      "tokens_in_total": {
+        "name": "Tokeny wejściowe — suma"
+      },
+      "tokens_out_total": {
+        "name": "Tokeny wyjściowe — suma"
+      },
+      "requests_total": {
+        "name": "Zapytania — suma"
+      },
+      "top_model_today": {
+        "name": "Najczęstszy model dzisiaj"
+      },
+      "last_request": {
+        "name": "Ostatnie zapytanie"
+      },
+      "budget_remaining": {
+        "name": "Pozostały budżet"
+      },
+      "catalog_models": {
+        "name": "Dostępne modele"
+      },
+      "selected_model_input_price": {
+        "name": "Cena wejścia wybranego modelu"
+      },
+      "selected_model_output_price": {
+        "name": "Cena wyjścia wybranego modelu"
+      }
+    },
+    "conversation": {
+      "name": "Nous Research"
+    },
+    "ai_task": {
+      "name": "Zadanie AI Nous Research"
+    }
+  },
+  "exceptions": {
+    "auth": {
+      "message": "Uwierzytelnienie nie powiodło się. Sprawdź klucz API."
+    },
+    "no_credits": {
+      "message": "Konto Nous Research nie ma środków. Doładuj je na portal.nousresearch.com."
+    },
+    "rate_limit": {
+      "message": "Osiągnięto limit zapytań. Zapytanie nie zostało wysłane."
+    },
+    "api": {
+      "message": "API Nous Research zwróciło błąd."
+    },
+    "structured_error": {
+      "message": "Model zwrócił odpowiedź strukturalną, której nie udało się sparsować."
+    },
+    "image_unsupported": {
+      "message": "Wybrany model nie obsługuje obrazów."
+    }
+  },
+  "services": {
+    "reset_usage": {
+      "name": "Wyzeruj zużycie",
+      "description": "Czyści lokalne liczniki kosztów i tokenów dla wpisu Nous Research.",
+      "fields": {
+        "entry_id": {
+          "name": "Wpis"
+        }
+      }
+    }
+  },
+  "selector": {
+    "reasoning_mode": {
+      "options": {
+        "none": "Wyłączone (szybciej, taniej)",
+        "prompt": "Prompt systemowy (zalecane dla Hermes 4)",
+        "prefill": "Prefill znacznika think"
+      }
+    },
+    "llm_hass_api": {
+      "options": {
+        "none": "Bez sterowania",
+        "assist": "Assist",
+        "conversation": "Assist + konwersacja"
+      }
+    }
+  },
+  "issues": {
+    "unknown_model": {
+      "title": "Modelu nie ma w katalogu",
+      "description": "Skonfigurowany model `{model}` nie występuje w katalogu API. Otwórz opcje integracji i wybierz model, inaczej każde zapytanie się nie powiedzie."
+    }
+  }
+}

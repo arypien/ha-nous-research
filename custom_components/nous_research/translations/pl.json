@@ -117,12 +117,6 @@
       "selected_model_output_price": {
         "name": "Cena wyjścia wybranego modelu"
       }
-    },
-    "conversation": {
-      "name": "Nous Research"
-    },
-    "ai_task": {
-      "name": "Zadanie AI Nous Research"
     }
   },
   "exceptions": {

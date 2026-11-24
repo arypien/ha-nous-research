@@ -121,7 +121,7 @@ oknie Assist. Agent wykonuje do sześciu rund narzędziowych przed odpowiedzią.
 action: ai_task.generate_data
 data:
   task_name: Podsumowanie wieczoru
-  entity_id: ai_task.nous_research_ai_task
+  entity_id: ai_task.nous_research
   instructions: >-
     Podsumuj stan domu w trzech krótkich punktach. Wspomnij o otwartych oknach
     i światłach, które wciąż się świecą.
@@ -139,16 +139,20 @@ Strukturalny wynik wraca w `data`, gotowy do automatyzacji.
 
 | Encja | Stan |
 | --- | --- |
-| `sensor.*_cost_total` | Skumulowane wydatki w USD |
-| `sensor.*_cost_today` / `_cost_7d` / `_cost_30d` | Wydatki w oknach czasowych |
-| `sensor.*_budget_remaining` | Budżet minus wydatki z tego miesiąca |
-| `sensor.*_tokens_in_total` / `_tokens_out_total` | Tokeny promptu / odpowiedzi |
-| `sensor.*_requests_total` | Udane zapytania |
-| `sensor.*_top_model_today` | Najczęściej używany model dziś |
-| `sensor.*_last_request` | Model, tokeny i koszt ostatniego zapytania |
-| `sensor.*_catalog_models` | Liczba modeli w katalogu |
-| `sensor.*_selected_model_input_price` | Cena promptu za 1M tokenów |
-| `sensor.*_selected_model_output_price` | Cena odpowiedzi za 1M tokenów |
+| `sensor.nous_research_cost_total` | Skumulowane wydatki w USD |
+| `sensor.nous_research_cost_today` | Wydatki z dzisiaj |
+| `sensor.nous_research_cost_last_7_days` / `_cost_last_30_days` | Wydatki w oknach czasowych |
+| `sensor.nous_research_input_tokens_total` / `_output_tokens_total` | Tokeny promptu / odpowiedzi |
+| `sensor.nous_research_requests_total` | Udane zapytania |
+| `sensor.nous_research_top_model_today` | Najczęściej używany model dziś |
+| `sensor.nous_research_last_request` | Model, tokeny i koszt ostatniego zapytania |
+| `sensor.nous_research_available_models` | Liczba modeli w katalogu |
+| `sensor.nous_research_selected_model_input_price` | Cena promptu za 1M tokenów |
+| `sensor.nous_research_selected_model_output_price` | Cena odpowiedzi za 1M tokenów |
+
+Identyfikatory encji biorą się z nazwy wpisu, więc inna **Nazwa** w konfiguracji daje
+inny prefiks. Sensor `sensor.nous_research_budget_remaining` powstaje dopiero po
+ustawieniu budżetu miesięcznego w opcjach.
 
 Ceny są w USD za 1M tokenów i wyświetlają się bez dopełniania zer: wartość z
 portalu `$0.03 / 1M` pokazuje się jako `0.03`, a nie `0.0300`.

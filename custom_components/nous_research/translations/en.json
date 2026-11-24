@@ -117,12 +117,6 @@
       "selected_model_output_price": {
         "name": "Selected model output price"
       }
-    },
-    "conversation": {
-      "name": "Nous Research"
-    },
-    "ai_task": {
-      "name": "Nous Research AI Task"
     }
   },
   "exceptions": {

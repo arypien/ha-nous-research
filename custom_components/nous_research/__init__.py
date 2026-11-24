@@ -47,6 +47,8 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__package__)
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK, Platform.SENSOR]
 
 ATTR_ENTRY_ID = "entry_id"

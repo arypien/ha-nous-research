@@ -1,6 +1,10 @@
 {
   "domain": "nous_research",
   "name": "Nous Research",
+  "after_dependencies": [
+    "ai_task",
+    "recorder"
+  ],
   "codeowners": [
     "@arypien"
   ],
@@ -8,10 +12,6 @@
   "dependencies": [
     "conversation",
     "http"
-  ],
-  "after_dependencies": [
-    "ai_task",
-    "recorder"
   ],
   "documentation": "https://github.com/arypien/ha-nous-research",
   "integration_type": "service",

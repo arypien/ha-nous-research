@@ -120,7 +120,7 @@ agent loops up to six tool rounds before answering.
 action: ai_task.generate_data
 data:
   task_name: Evening summary
-  entity_id: ai_task.nous_research_ai_task
+  entity_id: ai_task.nous_research
   instructions: >-
     Summarise the state of the house in three short bullet points.
     Mention open windows and lights that are still on.
@@ -138,16 +138,20 @@ The structured payload comes back in `data`, ready to use in automations.
 
 | Entity | State |
 | --- | --- |
-| `sensor.*_cost_total` | Cumulative spend in USD |
-| `sensor.*_cost_today` / `_cost_7d` / `_cost_30d` | Spend per window |
-| `sensor.*_budget_remaining` | Budget minus this month's spend |
-| `sensor.*_tokens_in_total` / `_tokens_out_total` | Prompt / completion tokens |
-| `sensor.*_requests_total` | Successful requests |
-| `sensor.*_top_model_today` | Most used model today |
-| `sensor.*_last_request` | Model, tokens and cost of the last call |
-| `sensor.*_catalog_models` | Number of models in the catalog |
-| `sensor.*_selected_model_input_price` | Prompt price per 1M tokens |
-| `sensor.*_selected_model_output_price` | Completion price per 1M tokens |
+| `sensor.nous_research_cost_total` | Cumulative spend in USD |
+| `sensor.nous_research_cost_today` | Spend today |
+| `sensor.nous_research_cost_last_7_days` / `_cost_last_30_days` | Spend per window |
+| `sensor.nous_research_input_tokens_total` / `_output_tokens_total` | Prompt / completion tokens |
+| `sensor.nous_research_requests_total` | Successful requests |
+| `sensor.nous_research_top_model_today` | Most used model today |
+| `sensor.nous_research_last_request` | Model, tokens and cost of the last call |
+| `sensor.nous_research_available_models` | Number of models in the catalog |
+| `sensor.nous_research_selected_model_input_price` | Prompt price per 1M tokens |
+| `sensor.nous_research_selected_model_output_price` | Completion price per 1M tokens |
+
+Entity ids follow the entry name, so a different **Name** in the setup produces a
+different prefix. `sensor.nous_research_budget_remaining` only exists once a monthly
+budget is set in the options.
 
 Prices are USD per 1M tokens, rendered without padding zeros: the portal value
 `$0.03 / 1M` shows up as `0.03`, not `0.0300`.

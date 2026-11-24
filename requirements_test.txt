@@ -1,10 +1,11 @@
-# pytest-homeassistant-custom-component pulls Home Assistant 2026.10.4;
-# the conversation platform needs these, which HA core ships outside its
-# package metadata (see package_constraints.txt).
+# pytest-homeassistant-custom-component pulls Home Assistant 2026.10.4.
+# The platforms this integration forwards (conversation, ai_task) import libraries
+# that HA ships outside its package metadata, so they are listed here too.
 pytest-homeassistant-custom-component==0.13.375
 hassil==3.12.1
 gazetteer-matcher
 home-assistant-intents
+PyTurboJPEG
 aiohttp
 aioresponses
 syrupy

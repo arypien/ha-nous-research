@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Declare the Marketplace/HACS category `ai_voice.ai_models` in the manifest.
+
 ## 0.1.0 — initial public release
 
 - Conversation agent for the Nous Research inference API with streaming replies and

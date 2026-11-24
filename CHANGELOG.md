@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- New brand assets: the integration icon (light and dark variants) now uses the
+  illustrated character mark.
+
 ## 0.1.1
 
 - Declare the Marketplace/HACS category `ai_voice.ai_models` in the manifest.

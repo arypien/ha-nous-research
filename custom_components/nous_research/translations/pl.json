@@ -73,29 +73,25 @@
         "reconfigure": {
           "data": {
             "chat_model": "Model",
-            "model_sort": "Sortowanie listy",
             "name": "Nazwa"
           },
           "data_description": {
             "chat_model": "Model czatu z katalogu tego adresu API.",
-            "model_sort": "Zmiana kolejności i wysłanie formularza przestawia listę powyżej. Nic nie zostanie zapisane, dopóki nie wybierzesz modelu.",
             "name": "Nazwa tworzonego agenta Assist i encji AI Task. Domyślnie identyfikator modelu."
           },
-          "description": "Zmień model lub nazwę agenta Assist i encji AI Task dla tego modelu wpisu {name}.\n\nWersja integracji: {version}.\n\nModele są posortowane od najtańszych - darmowe są na górze. Kolejność zmienisz polem sortowania.",
+          "description": "Zmień model lub nazwę agenta Assist i encji AI Task dla tego modelu wpisu {name}.\n\nWersja integracji: {version}.\n\nLista modeli jest ułożona wg opcji *Sortowanie listy modeli* tej integracji (domyślnie od najtańszych, darmowe na górze). Zmienisz ją w Konfiguruj.",
           "title": "Zmień model"
         },
         "user": {
           "data": {
             "chat_model": "Model",
-            "model_sort": "Sortowanie listy",
             "name": "Nazwa"
           },
           "data_description": {
             "chat_model": "Model czatu z katalogu tego adresu API.",
-            "model_sort": "Zmiana kolejności i wysłanie formularza przestawia listę powyżej. Nic nie zostanie zapisane, dopóki nie wybierzesz modelu.",
             "name": "Nazwa tworzonego agenta Assist i encji AI Task. Domyślnie identyfikator modelu."
           },
-          "description": "Dodaj model do {name}. Otrzymuje własnego agenta Assist (encję conversation.* do wyboru w Assist i w pipeline'ach), własną encję AI Task oraz własne sensory kosztu, tokenów i cen. Wspólne z wpisem pozostają tylko klucz API, prompt i narzędzia.\n\nWersja integracji: {version}.\n\nModele są posortowane od najtańszych - darmowe są na górze. Kolejność zmienisz polem sortowania.",
+          "description": "Dodaj model do {name}. Otrzymuje własnego agenta Assist (encję conversation.* do wyboru w Assist i w pipeline'ach), własną encję AI Task oraz własne sensory kosztu, tokenów i cen. Wspólne z wpisem pozostają tylko klucz API, prompt i narzędzia.\n\nWersja integracji: {version}.\n\nLista modeli jest ułożona wg opcji *Sortowanie listy modeli* tej integracji (domyślnie od najtańszych, darmowe na górze). Zmienisz ją w Konfiguruj.",
           "title": "Dodaj model"
         }
       }
@@ -205,6 +201,7 @@
           "cost_sensors": "Czujniki kosztów",
           "llm_hass_api": "Sterowanie Home Assistant",
           "max_tokens": "Maks. tokenów",
+          "model_sort": "Sortowanie listy modeli",
           "prompt": "Prompt systemowy",
           "reasoning_mode": "Tryb rozumowania",
           "temperature": "Temperatura"
@@ -216,6 +213,7 @@
           "cost_sensors": "Twórz czujniki kosztów i tokenów dla tego wpisu.",
           "llm_hass_api": "Udostępnia modelowi encje i usługi Home Assistant jako narzędzia.",
           "max_tokens": "Górny limit odpowiedzi, razem z tokenami rozumowania.",
+          "model_sort": "Kolejność listy w oknie dodawania modelu: od najtańszych (darmowe na górze), od najdroższych, nazwa A-Z lub najnowsze.",
           "prompt": "Instrukcje dodawane do każdej rozmowy. Puste pole oznacza wbudowany prompt asystenta.",
           "reasoning_mode": "Sposób wyzwalania rozumowania. Dokładny prompt opisano w README.",
           "temperature": "Temperatura próbkowania. Wartości 0.2-0.5 sprawdzają się w zadaniach sterowania."

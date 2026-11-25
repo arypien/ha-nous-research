@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.8
+
+**The sort control moved out of the model form and into the integration options.**
+
+- 0.1.7 put a *sort* dropdown inside the add-model form and relied on "change it and
+  submit" re-rendering the list. That cannot work: Home Assistant will not submit that
+  step without a model, so the list never re-sorted - the option looked dead.
+- The order is now the **Model list order / Sortowanie listy modeli** option, next to the
+  prompt and the temperature (Configure -> the entry). Pick it once, then *Add model*:
+  the dropdown opens in that order. Cheapest-first (free models on top) stays the default.
+- The model form description says which option controls the order and where to change it.
+- Model form keeps just the two fields it needs; en/pl translations updated (115/115).
+- 93 tests green: default option on new entries, the options form persisting the choice,
+  and the model list following it (price descending checked against a real catalog shape).
+
 ## 0.1.7
 
 **The model list is now sorted, and you can re-sort it without leaving the form.**

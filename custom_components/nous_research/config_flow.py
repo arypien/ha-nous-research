@@ -321,6 +321,7 @@ class NousConfigFlow(ConfigFlow, domain=DOMAIN):
                             CONF_BASE_URL: base_url,
                         },
                         options={
+                            CONF_MODEL_SORT: DEFAULT_MODEL_SORT,
                             CONF_PROMPT: DEFAULT_SYSTEM_PROMPT,
                             CONF_LLM_HASS_API: LLM_API_ASSIST,
                             CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
@@ -435,6 +436,8 @@ class NousOptionsFlow(OptionsFlow):
             return self.async_create_entry(
                 title="",
                 data={
+                    CONF_MODEL_SORT: user_input.get(CONF_MODEL_SORT)
+                    or DEFAULT_MODEL_SORT,
                     CONF_PROMPT: user_input.get(CONF_PROMPT)
                     or DEFAULT_SYSTEM_PROMPT,
                     CONF_LLM_HASS_API: None
@@ -470,6 +473,9 @@ class NousOptionsFlow(OptionsFlow):
         if current_reasoning not in REASONING_MODES:
             current_reasoning = DEFAULT_REASONING_MODE
         current_budget = options.get(CONF_BUDGET)
+        sorted_choice = options.get(CONF_MODEL_SORT) or DEFAULT_MODEL_SORT
+        if sorted_choice not in MODEL_SORTS:
+            sorted_choice = DEFAULT_MODEL_SORT
 
         schema = vol.Schema(
             {
@@ -477,6 +483,18 @@ class NousOptionsFlow(OptionsFlow):
                     CONF_PROMPT,
                     default=options.get(CONF_PROMPT) or DEFAULT_SYSTEM_PROMPT,
                 ): TextSelector(TextSelectorConfig(multiline=True)),
+                vol.Required(
+                    CONF_MODEL_SORT,
+                    default=sorted_choice,
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(MODEL_SORTS),
+                        translation_key="model_sort",
+                        mode=SelectSelectorMode.DROPDOWN,
+                        # The order is the point: never let the frontend sort it.
+                        sort=False,
+                    )
+                ),
                 vol.Required(
                     CONF_LLM_HASS_API, default=current_llm_api
                 ): SelectSelector(
@@ -603,29 +621,14 @@ class ModelSubentryFlow(ConfigSubentryFlow):
         current = str(subentry.data.get(CONF_CHAT_MODEL) or "") if subentry else ""
         default_title = subentry.title if subentry else ""
         self._version = await _async_version(self.hass)
+        # The order is an integration option: Home Assistant cannot submit this
+        # form without a model, so a per-form sort control could never re-render.
+        self._sort = str(entry.options.get(CONF_MODEL_SORT) or DEFAULT_MODEL_SORT)
+        if self._sort not in MODEL_SORTS:
+            self._sort = DEFAULT_MODEL_SORT
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            submitted_sort = str(user_input.get(CONF_MODEL_SORT) or "")
-            if (
-                submitted_sort in MODEL_SORTS
-                and submitted_sort != self._sort
-                and not str(user_input.get(CONF_CHAT_MODEL) or "").strip()
-            ):
-                # Only the order was changed: re-render the same list in the new
-                # order instead of complaining about a missing model.
-                self._sort = submitted_sort
-                return self._async_show_model_form(
-                    entry,
-                    catalog,
-                    step_id="reconfigure" if subentry is not None else "user",
-                    current="",
-                    default_title=str(user_input.get(CONF_NAME) or "") or default_title,
-                    errors={},
-                )
-            if submitted_sort in MODEL_SORTS:
-                self._sort = submitted_sort
-
             model = str(user_input.get(CONF_CHAT_MODEL) or "").strip()
             title = (
                 str(user_input.get(CONF_NAME) or "").strip()
@@ -705,16 +708,6 @@ class ModelSubentryFlow(ConfigSubentryFlow):
                         )
                     ),
                     vol.Optional(CONF_NAME, default=default_title): TextSelector(),
-                    # Changing this and pressing submit re-renders the list above;
-                    # nothing is stored until a model is picked.
-                    vol.Optional(CONF_MODEL_SORT, default=self._sort): SelectSelector(
-                        SelectSelectorConfig(
-                            options=list(MODEL_SORTS),
-                            translation_key="model_sort",
-                            mode=SelectSelectorMode.DROPDOWN,
-                            sort=False,
-                        )
-                    ),
                 }
             ),
             errors=errors,

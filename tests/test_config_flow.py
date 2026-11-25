@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_API_KEY, CONF_PROMPT
+from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API, CONF_PROMPT
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.setup import async_setup_component
@@ -141,6 +141,8 @@ async def test_entry_is_an_api_account(hass: HomeAssistant) -> None:
     assert options[CONF_REASONING_MODE]
     assert options[CONF_COST_SENSORS] is True
     assert options[CONF_CATALOG_INTERVAL] > 0
+    # Sorting is an integration option, so a fresh entry carries the default.
+    assert options[CONF_MODEL_SORT] == cf.DEFAULT_MODEL_SORT
 
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     assert entry.unique_id == cf._unique_id("sk-test-123")
@@ -561,24 +563,48 @@ async def test_subentry_lists_the_cheapest_models_first(hass: HomeAssistant) -> 
     assert _model_values(result) == ["", "vendor/free", "vendor/cheap", "vendor/paid"]
 
 
-async def test_subentry_sort_field_reorders_without_storing(
-    hass: HomeAssistant,
-) -> None:
-    """Changing only the sort field re-renders the list; nothing is stored."""
+async def test_subentry_follows_the_stored_sort_option(hass: HomeAssistant) -> None:
+    """The order comes from the entry option: most expensive first when asked."""
     FakeClient.models = SORTABLE
     entry = _mock_entry(hass)
-
-    result = await _async_start_subentry(hass, entry)
-    result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {CONF_CHAT_MODEL: "", CONF_MODEL_SORT: "price_desc"}
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_MODEL_SORT: "price_desc"}
     )
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert not result.get("errors")
+    result = await _async_start_subentry(hass, entry)
+
     assert _model_values(result) == ["", "vendor/paid", "vendor/cheap", "vendor/free"]
-    # The selector keeps showing the order the list is now drawn in.
-    sort_selector = list(result["data_schema"].schema.values())[2]
-    assert sort_selector.config["options"] == list(cf.MODEL_SORTS)
+
+
+async def test_options_flow_stores_the_model_sort(hass: HomeAssistant) -> None:
+    """The options form persists the chosen order for the model list."""
+    entry = _mock_entry(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+    fields = list(result["data_schema"].schema.values())
+    sort_selector = next(
+        selector
+        for key, selector in result["data_schema"].schema.items()
+        if str(key) == CONF_MODEL_SORT
+    )
     assert sort_selector.config["translation_key"] == "model_sort"
-    assert not entry.subentries
+    assert fields  # the rest of the options still render
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_PROMPT: "You are terse.",
+            CONF_LLM_HASS_API: "assist",
+            CONF_MAX_TOKENS: 512,
+            CONF_TEMPERATURE: 0.3,
+            CONF_REASONING_MODE: "none",
+            CONF_COST_SENSORS: True,
+            CONF_CATALOG_INTERVAL: 60,
+            CONF_MODEL_SORT: "name",
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_MODEL_SORT] == "name"

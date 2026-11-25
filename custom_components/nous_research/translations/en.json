@@ -73,29 +73,25 @@
         "reconfigure": {
           "data": {
             "chat_model": "Model",
-            "model_sort": "Sort the list by",
             "name": "Name"
           },
           "data_description": {
             "chat_model": "Chat model from the catalog of this endpoint.",
-            "model_sort": "Changing the order and submitting reorders the list above. Nothing is saved until you pick a model.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nIntegration version: {version}.\n\nModels are listed cheapest first - the free ones come first. Use the sorting field to change the order.",
+          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nIntegration version: {version}.\n\nThe model list is ordered by this entry's *Model list order* option (cheapest first, free models on top, by default). Change it under Configure.",
           "title": "Reconfigure model"
         },
         "user": {
           "data": {
             "chat_model": "Model",
-            "model_sort": "Sort the list by",
             "name": "Name"
           },
           "data_description": {
             "chat_model": "Chat model from the catalog of this endpoint.",
-            "model_sort": "Changing the order and submitting reorders the list above. Nothing is saved until you pick a model.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nIntegration version: {version}.\n\nModels are listed cheapest first - the free ones come first. Use the sorting field to change the order.",
+          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nIntegration version: {version}.\n\nThe model list is ordered by this entry's *Model list order* option (cheapest first, free models on top, by default). Change it under Configure.",
           "title": "Add model"
         }
       }
@@ -205,6 +201,7 @@
           "cost_sensors": "Cost sensors",
           "llm_hass_api": "Home Assistant control",
           "max_tokens": "Max tokens",
+          "model_sort": "Model list order",
           "prompt": "System prompt",
           "reasoning_mode": "Reasoning mode",
           "temperature": "Temperature"
@@ -216,6 +213,7 @@
           "cost_sensors": "Create the cost and token sensors for this entry.",
           "llm_hass_api": "Expose Home Assistant entities and services to the model as tools.",
           "max_tokens": "Upper bound for the completion, thinking tokens included.",
+          "model_sort": "Order of the dropdown in the add-model form: cheapest first (free models on top), most expensive first, name A-Z or newest first.",
           "prompt": "Instructions prepended to every conversation. Leave empty to use the built-in assistant prompt.",
           "reasoning_mode": "How thinking is triggered. See the README for the exact prompt.",
           "temperature": "Sampling temperature. 0.2-0.5 works well for control tasks."

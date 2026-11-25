@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.7
+
+**The model list is now sorted, and you can re-sort it without leaving the form.**
+
+- **Cheapest first by default.** The 307 chat models used to appear in catalog order, so
+  the three free variants were buried among paid siblings with the same prefix. The
+  dropdown now starts with the free models (price 0) and walks up the price ladder;
+  models that advertise no price go *last* instead of posing as free.
+- **Sort field in the form.** *Sortowanie listy* offers price ascending, price descending,
+  name A-Z and newest first. Change it and submit: the same dialog comes back reordered,
+  nothing is stored until a model is actually picked.
+- Ordering lives in `catalog.sorted_chat_models()` (`SORT_*` constants in `const.py`), so
+  the model dropdown, the reconfigure step and any future list share one implementation.
+- en/pl translations for the new field and its four choices (117/117 keys).
+- 92 tests green, including ordering by price/name/age and the re-render-without-storing
+  path.
+
 ## 0.1.6
 
 **Every request now carries the `tags` the gateway demands.**

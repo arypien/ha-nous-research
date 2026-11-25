@@ -7,6 +7,12 @@ from custom_components.nous_research.catalog import (
     is_chat_model,
     known_model,
     model_ids,
+    sorted_chat_models,
+)
+from custom_components.nous_research.const import (
+    SORT_NAME,
+    SORT_NEWEST,
+    SORT_PRICE_DESC,
 )
 
 CATALOG = [
@@ -63,4 +69,68 @@ def test_free_variant_is_its_own_id() -> None:
     assert chat_model_ids(catalog) == [
         "upstage/solar-mini-4-5",
         "upstage/solar-mini4:free",
+    ]
+
+
+PRICED = [
+    {
+        "id": "vendor/expensive",
+        "name": "Expensive",
+        "pricing": {"prompt": "0.00001", "completion": "0.00004"},
+    },
+    {
+        "id": "vendor/free",
+        "name": "Free one",
+        "pricing": {"prompt": "0", "completion": "0"},
+    },
+    {
+        "id": "vendor/cheap",
+        "name": "Cheap",
+        "pricing": {"prompt": "0.0000001", "completion": "0.0000002"},
+    },
+    {"id": "vendor/no-price", "name": "Unpriced"},
+    {"id": "vendor/embed", "pricing": {"prompt": "0", "completion": "0"}},
+]
+
+
+def test_sorted_chat_models_defaults_to_cheapest_first() -> None:
+    """The default order starts with the free models, unpriced ones go last."""
+    order = [model["id"] for model in sorted_chat_models(PRICED)]
+    assert order == [
+        "vendor/free",
+        "vendor/cheap",
+        "vendor/expensive",
+        "vendor/no-price",
+    ]
+    # An embed model never shows up in a chat list, whatever it costs.
+    assert "vendor/embed" not in order
+
+
+def test_sorted_chat_models_expensive_first() -> None:
+    """Descending price puts the priciest model on top and unpriced ones last."""
+    order = [model["id"] for model in sorted_chat_models(PRICED, SORT_PRICE_DESC)]
+    assert order == [
+        "vendor/expensive",
+        "vendor/cheap",
+        "vendor/free",
+        "vendor/no-price",
+    ]
+
+
+def test_sorted_chat_models_by_name_and_by_age() -> None:
+    """Alphabetical and newest-first orders are stable alternatives."""
+    by_name = [model["id"] for model in sorted_chat_models(PRICED, SORT_NAME)]
+    assert by_name == [
+        "vendor/cheap",
+        "vendor/expensive",
+        "vendor/free",
+        "vendor/no-price",
+    ]
+    fresh = [
+        {"id": "vendor/old", "name": "Old", "created": 1},
+        {"id": "vendor/new", "name": "New", "created": 99},
+    ]
+    assert [m["id"] for m in sorted_chat_models(fresh, SORT_NEWEST)] == [
+        "vendor/new",
+        "vendor/old",
     ]

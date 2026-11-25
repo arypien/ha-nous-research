@@ -73,25 +73,29 @@
         "reconfigure": {
           "data": {
             "chat_model": "Model",
+            "model_sort": "Sortowanie listy",
             "name": "Nazwa"
           },
           "data_description": {
             "chat_model": "Model czatu z katalogu tego adresu API.",
+            "model_sort": "Zmiana kolejności i wysłanie formularza przestawia listę powyżej. Nic nie zostanie zapisane, dopóki nie wybierzesz modelu.",
             "name": "Nazwa tworzonego agenta Assist i encji AI Task. Domyślnie identyfikator modelu."
           },
-          "description": "Zmień model lub nazwę agenta Assist i encji AI Task dla tego modelu wpisu {name}.\n\nWersja integracji: {version}.",
+          "description": "Zmień model lub nazwę agenta Assist i encji AI Task dla tego modelu wpisu {name}.\n\nWersja integracji: {version}.\n\nModele są posortowane od najtańszych - darmowe są na górze. Kolejność zmienisz polem sortowania.",
           "title": "Zmień model"
         },
         "user": {
           "data": {
             "chat_model": "Model",
+            "model_sort": "Sortowanie listy",
             "name": "Nazwa"
           },
           "data_description": {
             "chat_model": "Model czatu z katalogu tego adresu API.",
+            "model_sort": "Zmiana kolejności i wysłanie formularza przestawia listę powyżej. Nic nie zostanie zapisane, dopóki nie wybierzesz modelu.",
             "name": "Nazwa tworzonego agenta Assist i encji AI Task. Domyślnie identyfikator modelu."
           },
-          "description": "Dodaj model do {name}. Otrzymuje własnego agenta Assist (encję conversation.* do wyboru w Assist i w pipeline'ach), własną encję AI Task oraz własne sensory kosztu, tokenów i cen. Wspólne z wpisem pozostają tylko klucz API, prompt i narzędzia.\n\nWersja integracji: {version}.",
+          "description": "Dodaj model do {name}. Otrzymuje własnego agenta Assist (encję conversation.* do wyboru w Assist i w pipeline'ach), własną encję AI Task oraz własne sensory kosztu, tokenów i cen. Wspólne z wpisem pozostają tylko klucz API, prompt i narzędzia.\n\nWersja integracji: {version}.\n\nModele są posortowane od najtańszych - darmowe są na górze. Kolejność zmienisz polem sortowania.",
           "title": "Dodaj model"
         }
       }
@@ -227,6 +231,14 @@
         "assist": "Assist",
         "conversation": "Assist + konwersacja",
         "none": "Bez sterowania"
+      }
+    },
+    "model_sort": {
+      "options": {
+        "name": "Nazwa (A-Z)",
+        "newest": "Najnowsze",
+        "price_asc": "Cena: od najtańszych (darmowe na górze)",
+        "price_desc": "Cena: od najdroższych"
       }
     },
     "reasoning_mode": {

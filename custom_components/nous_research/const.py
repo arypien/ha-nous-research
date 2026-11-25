@@ -38,6 +38,16 @@ API_TAGS: Final = ["user=home-assistant"]
 #: No model id is hardcoded: the catalog is aggregated and namespaced
 #: (``vendor/model``), so the value is resolved from the live catalog.
 DEFAULT_CHAT_MODEL: Final = ""
+
+#: Order of the model dropdown offered when a model is added or changed.
+CONF_MODEL_SORT: Final = "model_sort"
+SORT_PRICE_ASC: Final = "price_asc"
+SORT_PRICE_DESC: Final = "price_desc"
+SORT_NAME: Final = "name"
+SORT_NEWEST: Final = "newest"
+MODEL_SORTS: Final = [SORT_PRICE_ASC, SORT_PRICE_DESC, SORT_NAME, SORT_NEWEST]
+#: Cheapest first: every free model lands on top of the list.
+DEFAULT_MODEL_SORT: Final = SORT_PRICE_ASC
 DEFAULT_MAX_TOKENS: Final = 1500
 DEFAULT_TEMPERATURE: Final = 0.4
 DEFAULT_REASONING_MODE: Final = REASONING_PROMPT

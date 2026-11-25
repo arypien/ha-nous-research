@@ -73,25 +73,29 @@
         "reconfigure": {
           "data": {
             "chat_model": "Model",
+            "model_sort": "Sort the list by",
             "name": "Name"
           },
           "data_description": {
             "chat_model": "Chat model from the catalog of this endpoint.",
+            "model_sort": "Changing the order and submitting reorders the list above. Nothing is saved until you pick a model.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nIntegration version: {version}.",
+          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nIntegration version: {version}.\n\nModels are listed cheapest first - the free ones come first. Use the sorting field to change the order.",
           "title": "Reconfigure model"
         },
         "user": {
           "data": {
             "chat_model": "Model",
+            "model_sort": "Sort the list by",
             "name": "Name"
           },
           "data_description": {
             "chat_model": "Chat model from the catalog of this endpoint.",
+            "model_sort": "Changing the order and submitting reorders the list above. Nothing is saved until you pick a model.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nIntegration version: {version}.",
+          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nIntegration version: {version}.\n\nModels are listed cheapest first - the free ones come first. Use the sorting field to change the order.",
           "title": "Add model"
         }
       }
@@ -227,6 +231,14 @@
         "assist": "Assist",
         "conversation": "Assist + conversation",
         "none": "No control"
+      }
+    },
+    "model_sort": {
+      "options": {
+        "name": "Name (A-Z)",
+        "newest": "Newest first",
+        "price_asc": "Price: cheapest first (free models on top)",
+        "price_desc": "Price: most expensive first"
       }
     },
     "reasoning_mode": {

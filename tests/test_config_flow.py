@@ -26,6 +26,7 @@ from custom_components.nous_research.api import (
 from custom_components.nous_research.config_flow import CONF_NAME
 from custom_components.nous_research.const import (
     CONF_BASE_URL,
+    CONF_MODEL_SORT,
     CONF_CATALOG_INTERVAL,
     CONF_CHAT_MODEL,
     CONF_COST_SENSORS,
@@ -523,3 +524,61 @@ async def test_subentry_hard_fails_when_the_network_is_down(
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
     assert not hass.config_entries.async_get_entry(entry.entry_id).subentries
+
+
+SORTABLE = [
+    {
+        "id": "vendor/paid",
+        "name": "Vendor: Paid",
+        "pricing": {"prompt": "0.00001", "completion": "0.00002"},
+    },
+    {
+        "id": "vendor/free",
+        "name": "Vendor: Free",
+        "pricing": {"prompt": "0", "completion": "0"},
+    },
+    {
+        "id": "vendor/cheap",
+        "name": "Vendor: Cheap",
+        "pricing": {"prompt": "0.0000001", "completion": "0.0000002"},
+    },
+]
+
+
+def _model_values(result: dict[str, Any]) -> list[str]:
+    """Return the model ids offered by the first form field."""
+    selector = next(iter(result["data_schema"].schema.values()))
+    return [option["value"] for option in selector.config["options"]]
+
+
+async def test_subentry_lists_the_cheapest_models_first(hass: HomeAssistant) -> None:
+    """The dropdown opens with the free models on top, then walks up in price."""
+    FakeClient.models = SORTABLE
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+
+    assert _model_values(result) == ["", "vendor/free", "vendor/cheap", "vendor/paid"]
+
+
+async def test_subentry_sort_field_reorders_without_storing(
+    hass: HomeAssistant,
+) -> None:
+    """Changing only the sort field re-renders the list; nothing is stored."""
+    FakeClient.models = SORTABLE
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: "", CONF_MODEL_SORT: "price_desc"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert not result.get("errors")
+    assert _model_values(result) == ["", "vendor/paid", "vendor/cheap", "vendor/free"]
+    # The selector keeps showing the order the list is now drawn in.
+    sort_selector = list(result["data_schema"].schema.values())[2]
+    assert sort_selector.config["options"] == list(cf.MODEL_SORTS)
+    assert sort_selector.config["translation_key"] == "model_sort"
+    assert not entry.subentries

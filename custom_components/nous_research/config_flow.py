@@ -29,6 +29,7 @@ from homeassistant.helpers.selector import (
     NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -42,7 +43,11 @@ from .api import (
     NousPaymentRequiredError,
     NousRateLimitError,
 )
-from .catalog import chat_model_ids, is_chat_model, model_id
+from .catalog import (
+    chat_model_ids,
+    model_id,
+    sorted_chat_models,
+)
 from .const import (
     CONF_BASE_URL,
     CONF_BUDGET,
@@ -50,16 +55,19 @@ from .const import (
     CONF_CHAT_MODEL,
     CONF_COST_SENSORS,
     CONF_MAX_TOKENS,
+    CONF_MODEL_SORT,
     CONF_REASONING_MODE,
     CONF_TEMPERATURE,
     DEFAULT_BASE_URL,
     DEFAULT_CATALOG_INTERVAL,
     DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL_SORT,
     DEFAULT_NAME,
     DEFAULT_REASONING_MODE,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_TEMPERATURE,
     DOMAIN,
+    MODEL_SORTS,
     REASONING_MODES,
     SUBENTRY_TYPE_MODEL,
 )
@@ -156,20 +164,21 @@ def _price_label(model: dict[str, Any]) -> str:
 
 
 def _chat_model_options(
-    catalog: Iterable[dict[str, Any]] | None, placeholder: str
+    catalog: Iterable[dict[str, Any]] | None,
+    placeholder: str,
+    sort: str = DEFAULT_MODEL_SORT,
 ) -> list[dict[str, str]]:
     """Build searchable dropdown entries, tagged with their price.
 
     The first row is a placeholder: Home Assistant preselects the first option of
     a dropdown, so without it an untouched form silently installs whichever model
     happens to sit at the top of the catalog (a paid sibling of the free one).
+    The order comes from :func:`sorted_chat_models` -- cheapest first by default.
     """
     options: list[dict[str, str]] = [
         {"value": PLACEHOLDER_MODEL, "label": placeholder}
     ]
-    for model in catalog or []:
-        if not is_chat_model(model):
-            continue
+    for model in sorted_chat_models(catalog, sort):
         identifier = model_id(model)
         name = str(model.get("name") or identifier)
         label = f"{name} · {identifier}"
@@ -180,10 +189,13 @@ def _chat_model_options(
 
 
 def _chat_model_options_with(
-    catalog: Iterable[dict[str, Any]] | None, current: str, placeholder: str
+    catalog: Iterable[dict[str, Any]] | None,
+    current: str,
+    placeholder: str,
+    sort: str = DEFAULT_MODEL_SORT,
 ) -> list[dict[str, str]]:
     """Build dropdown entries, keeping ``current`` selectable when missing."""
-    options = _chat_model_options(catalog, placeholder)
+    options = _chat_model_options(catalog, placeholder, sort)
     if current and current not in {option["value"] for option in options}:
         options.insert(1, {"value": current, "label": current})
     return options
@@ -543,6 +555,8 @@ class ModelSubentryFlow(ConfigSubentryFlow):
         self._pending: tuple[str, str, ConfigSubentry | None] | None = None
         self._pending_message = ""
         self._version = "?"
+        #: Order of the dropdown, changeable from the form itself.
+        self._sort = DEFAULT_MODEL_SORT
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -592,6 +606,26 @@ class ModelSubentryFlow(ConfigSubentryFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            submitted_sort = str(user_input.get(CONF_MODEL_SORT) or "")
+            if (
+                submitted_sort in MODEL_SORTS
+                and submitted_sort != self._sort
+                and not str(user_input.get(CONF_CHAT_MODEL) or "").strip()
+            ):
+                # Only the order was changed: re-render the same list in the new
+                # order instead of complaining about a missing model.
+                self._sort = submitted_sort
+                return self._async_show_model_form(
+                    entry,
+                    catalog,
+                    step_id="reconfigure" if subentry is not None else "user",
+                    current="",
+                    default_title=str(user_input.get(CONF_NAME) or "") or default_title,
+                    errors={},
+                )
+            if submitted_sort in MODEL_SORTS:
+                self._sort = submitted_sort
+
             model = str(user_input.get(CONF_CHAT_MODEL) or "").strip()
             title = (
                 str(user_input.get(CONF_NAME) or "").strip()
@@ -629,8 +663,28 @@ class ModelSubentryFlow(ConfigSubentryFlow):
                 else:
                     return self._async_store(entry, subentry, model, title)
 
+        return self._async_show_model_form(
+            entry,
+            catalog,
+            "reconfigure" if subentry is not None else "user",
+            current,
+            default_title,
+            errors,
+        )
+
+    @callback
+    def _async_show_model_form(
+        self,
+        entry: ConfigEntry,
+        catalog: list[dict[str, Any]],
+        step_id: str,
+        current: str,
+        default_title: str,
+        errors: dict[str, str],
+    ) -> SubentryFlowResult:
+        """Render the model form in the currently selected order."""
         return self.async_show_form(
-            step_id="reconfigure" if subentry is not None else "user",
+            step_id=step_id,
             data_schema=vol.Schema(
                 {
                     # No preselected model: an untouched form must not quietly
@@ -643,6 +697,7 @@ class ModelSubentryFlow(ConfigSubentryFlow):
                                 catalog,
                                 current,
                                 _placeholder_label(self.hass.config.language),
+                                self._sort,
                             ),
                             # Free text is accepted by the selector so a wrong id
                             # reaches the form error, not a generic schema failure.
@@ -650,6 +705,16 @@ class ModelSubentryFlow(ConfigSubentryFlow):
                         )
                     ),
                     vol.Optional(CONF_NAME, default=default_title): TextSelector(),
+                    # Changing this and pressing submit re-renders the list above;
+                    # nothing is stored until a model is picked.
+                    vol.Optional(CONF_MODEL_SORT, default=self._sort): SelectSelector(
+                        SelectSelectorConfig(
+                            options=list(MODEL_SORTS),
+                            translation_key="model_sort",
+                            mode=SelectSelectorMode.DROPDOWN,
+                            sort=False,
+                        )
+                    ),
                 }
             ),
             errors=errors,

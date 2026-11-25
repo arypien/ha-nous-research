@@ -37,4 +37,5 @@ async def test_stream_deltas(hass: HomeAssistant, aioclient_mock, client: NousCl
     assert thinking == "hmm"
     assert events[-1]["type"] == "usage"
     # The gateway refuses a streamed call without the user tag as well.
-    assert aioclient_mock.mock_calls[0][2]["tags"] == ["user=home-assistant"]
+    sent = aioclient_mock.mock_calls[0][2]
+    assert sent["tags"] == ["user=home-assistant"]

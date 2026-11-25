@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="images/banner-dark.png">
-    <img alt="Nous Research for Home Assistant" src="images/banner-light.png" width="760">
+    <source media="(prefers-color-scheme: dark)" srcset="images/banner-readme-dark.png">
+    <img alt="Nous Research for Home Assistant" src="images/banner-readme-light.png" width="760">
   </picture>
 </p>
 

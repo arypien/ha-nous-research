@@ -26,11 +26,13 @@
         "data": {
           "api_key": "API key",
           "base_url": "Base URL",
+          "model_sort": "Model list order",
           "name": "Name"
         },
         "data_description": {
           "api_key": "Key from portal.nousresearch.com. It is sent as a Bearer token and stored in the config entry.",
           "base_url": "OpenAI-compatible endpoint. Keep the default unless you route requests through a proxy.",
+          "model_sort": "Order of the model list in the add-model form. Cheapest first keeps the free models on top. You can change it later under Configure.",
           "name": "Name of this integration entry."
         },
         "description": "Connect Home Assistant to the Nous Research inference API. The entry stores the API key and creates the account sensors; every model is added afterwards as a subentry with its own agent and figures. Create a key at portal.nousresearch.com.",
@@ -79,7 +81,7 @@
             "chat_model": "Chat model from the catalog of this endpoint.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nIntegration version: {version}.\n\nThe model list is ordered by this entry's *Model list order* option (cheapest first, free models on top, by default). Change it under Configure.",
+          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nThe model list is ordered by this entry's *Model list order* option (cheapest first, free models on top, by default). Change it under Configure.",
           "title": "Reconfigure model"
         },
         "user": {
@@ -91,7 +93,7 @@
             "chat_model": "Chat model from the catalog of this endpoint.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nIntegration version: {version}.\n\nThe model list is ordered by this entry's *Model list order* option (cheapest first, free models on top, by default). Change it under Configure.",
+          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nThe model list is ordered by this entry's *Model list order* option (cheapest first, free models on top, by default). Change it under Configure.",
           "title": "Add model"
         }
       }

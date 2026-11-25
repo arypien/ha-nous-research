@@ -149,6 +149,44 @@ async def test_entry_is_an_api_account(hass: HomeAssistant) -> None:
     assert not entry.subentries
 
 
+async def test_credentials_form_offers_the_model_order(hass: HomeAssistant) -> None:
+    """The key form carries the model order as its last field."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    keys = [str(key) for key in result["data_schema"].schema]
+    assert keys[-1] == CONF_MODEL_SORT
+    selector = next(
+        selector
+        for key, selector in result["data_schema"].schema.items()
+        if str(key) == CONF_MODEL_SORT
+    )
+    assert selector.config["translation_key"] == "model_sort"
+    assert selector.config["options"] == list(cf.MODEL_SORTS)
+
+
+async def test_entry_keeps_the_chosen_model_order(hass: HomeAssistant) -> None:
+    """What the credentials form picks for the order lands in the entry options."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**_credentials(), CONF_MODEL_SORT: "newest"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["options"][CONF_MODEL_SORT] == "newest"
+
+
+def test_unknown_model_order_falls_back_to_the_default() -> None:
+    """The schema rejects bogus orders; the helper still guards the option."""
+    assert cf._valid_sort({CONF_MODEL_SORT: "newest"}) == "newest"
+    assert cf._valid_sort({CONF_MODEL_SORT: "cheapest-ish"}) == cf.DEFAULT_MODEL_SORT
+    assert cf._valid_sort({}) == cf.DEFAULT_MODEL_SORT
+
+
 @pytest.mark.parametrize(
     ("overrides", "field", "error"),
     [
@@ -608,3 +646,14 @@ async def test_options_flow_stores_the_model_sort(hass: HomeAssistant) -> None:
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_MODEL_SORT] == "name"
+
+
+async def test_subentry_form_no_longer_shows_the_version(
+    hass: HomeAssistant,
+) -> None:
+    """The add-model form names the entry only - no integration version line."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+
+    assert result.get("description_placeholders") == {"name": entry.title}

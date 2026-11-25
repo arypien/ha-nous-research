@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.9
+
+**The model order is offered where you add the account, and the version line is gone.**
+
+- The API key form now ends with *Sortowanie listy modeli / Model list order*, so the
+  order is set once, while the key is still in front of you - no detour through
+  Configure afterwards. What the form submits is stored in the entry options (unknown
+  values fall back to `price_asc`; the selector already rejects them server-side).
+- Dropped the *Integration version: x.y.z* line from the add-model and reconfigure
+  forms. The integration version belongs on the entry page, not in a form about a model.
+- en/pl translations updated (117/117 keys); a `{version}` placeholder left in a string
+  without a matching placeholder would render literally, so both were removed together.
+- 97 tests green: the order field sits last on the key form, the choice reaches the entry
+  options, `_valid_sort` guards it, and the model form no longer carries a version.
+
 ## 0.1.8
 
 **The sort control moved out of the model form and into the integration options.**

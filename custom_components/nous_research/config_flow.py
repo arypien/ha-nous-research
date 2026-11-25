@@ -21,7 +21,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API, CONF_PROMPT
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.loader import async_get_integration
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -226,13 +225,10 @@ async def _async_fetch_catalog(
         return [], "unknown"
 
 
-async def _async_version(hass: HomeAssistant) -> str:
-    """Return the integration version, so a form shows which code is running."""
-    try:
-        integration = await async_get_integration(hass, DOMAIN)
-    except Exception:  # noqa: BLE001
-        return "?"
-    return str(integration.version or "?")
+def _valid_sort(user_input: dict[str, Any]) -> str:
+    """Return the order picked in a form, falling back to the default."""
+    choice = str(user_input.get(CONF_MODEL_SORT) or "")
+    return choice if choice in MODEL_SORTS else DEFAULT_MODEL_SORT
 
 
 async def _async_probe(
@@ -321,7 +317,7 @@ class NousConfigFlow(ConfigFlow, domain=DOMAIN):
                             CONF_BASE_URL: base_url,
                         },
                         options={
-                            CONF_MODEL_SORT: DEFAULT_MODEL_SORT,
+                            CONF_MODEL_SORT: _valid_sort(user_input),
                             CONF_PROMPT: DEFAULT_SYSTEM_PROMPT,
                             CONF_LLM_HASS_API: LLM_API_ASSIST,
                             CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
@@ -359,6 +355,19 @@ class NousConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_NAME, default=values.get(CONF_NAME, DEFAULT_NAME)
                 ): TextSelector(),
+                # Last on the form on purpose: the key and the URL are what the
+                # step needs, the order of the model list is a comfort setting.
+                vol.Optional(
+                    CONF_MODEL_SORT,
+                    default=values.get(CONF_MODEL_SORT, DEFAULT_MODEL_SORT),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(MODEL_SORTS),
+                        translation_key="model_sort",
+                        mode=SelectSelectorMode.DROPDOWN,
+                        sort=False,
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -528,7 +537,8 @@ class NousOptionsFlow(OptionsFlow):
                     SelectSelectorConfig(options=REASONING_MODES, custom_value=False)
                 ),
                 vol.Required(
-                    CONF_COST_SENSORS, default=bool(options.get(CONF_COST_SENSORS, True))
+                    CONF_COST_SENSORS,
+                    default=bool(options.get(CONF_COST_SENSORS, True)),
                 ): BooleanSelector(),
                 vol.Optional(
                     CONF_BUDGET,
@@ -572,7 +582,6 @@ class ModelSubentryFlow(ConfigSubentryFlow):
         super().__init__()
         self._pending: tuple[str, str, ConfigSubentry | None] | None = None
         self._pending_message = ""
-        self._version = "?"
         #: Order of the dropdown, changeable from the form itself.
         self._sort = DEFAULT_MODEL_SORT
 
@@ -620,7 +629,6 @@ class ModelSubentryFlow(ConfigSubentryFlow):
         available = set(chat_model_ids(catalog))
         current = str(subentry.data.get(CONF_CHAT_MODEL) or "") if subentry else ""
         default_title = subentry.title if subentry else ""
-        self._version = await _async_version(self.hass)
         # The order is an integration option: Home Assistant cannot submit this
         # form without a model, so a per-form sort control could never re-render.
         self._sort = str(entry.options.get(CONF_MODEL_SORT) or DEFAULT_MODEL_SORT)
@@ -711,10 +719,7 @@ class ModelSubentryFlow(ConfigSubentryFlow):
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "name": entry.title,
-                "version": self._version,
-            },
+            description_placeholders={"name": entry.title},
         )
 
     @callback
@@ -749,7 +754,6 @@ class ModelSubentryFlow(ConfigSubentryFlow):
             description_placeholders={
                 "model": model,
                 "error": self._pending_message or "unknown",
-                "version": self._version,
             },
         )
 

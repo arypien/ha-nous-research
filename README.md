@@ -33,8 +33,10 @@ tokens and spend computed on your own instance.
   `think` tag prefill.
 - **Cost tracking** — today / 7 days / 30 days / total, token and request counters,
   optional monthly budget, all stored locally.
+- **Per-model figures** — every model subentry has its own cost, token, request
+  and price sensors, all starting at zero.
 - **Live model catalog** — prices, context lengths and modalities straight from
-  `/v1/models`; the chat model is validated against it.
+  `/v1/models`; each model is validated against it.
 - **Long-term statistics** — cost sensors push `total` statistics, so history
   survives recorder purges and works in Statistics Graph cards.
 - **Bilingual UI** — English and Polish, with a
@@ -57,26 +59,31 @@ Copy `custom_components/nous_research` from the release ZIP into
 Requires **Home Assistant 2026.9.0 or newer** and an API key from
 <https://portal.nousresearch.com>.
 
+> **Upgrading from 0.1.2:** an entry becomes an API account, so its stored model is
+> dropped (cost history is kept) and its Assist agent and AI Task entity disappear.
+> Open the entry, press **Add model** and pick the model again — nothing else needs
+> to be reconfigured.
+
 ## Configuration
 
 1. Create an API key in the Nous portal.
 2. **Settings → Devices & services → Add integration → Nous Research**.
-3. Paste the key — the catalog is fetched and validated with a one-token request,
-   so a revoked key fails immediately instead of at first use.
-4. Pick the chat model from the list the API reports (searchable dropdown, free
-   text allowed).
+3. Paste the key — the catalog is fetched right away, so a revoked key fails
+   immediately instead of at first use.
+4. On the new entry press **Add model** and pick a chat model from the list the
+   API reports (searchable dropdown, free text allowed). Repeat for more models.
 
 | Field | Meaning |
 | --- | --- |
 | API key | Bearer token from the portal, stored in the config entry |
 | Base URL | Defaults to `https://inference-api.nousresearch.com/v1` |
 | Name | Entry name, also the prefix of the created entities |
+| Model | Picked per subentry (after the entry exists), from the live `/models` catalog |
 | Model | Chosen in the second step from the live `/models` catalog |
 
 No model id is hardcoded: the catalog is aggregated and namespaced
-(`vendor/model`, ~300 chat models), so both the list and its default come from the
-API. Batch endpoints (`:batch`), embeddings, TTS and image-only models are filtered
-out. If a stored model id disappears from the catalog, the integration falls back to
+(`vendor/model`, ~300 chat models), so the list comes from the API. Batch endpoints
+(`:batch`), embeddings, TTS and image-only models are filtered out. If a stored model id disappears from the catalog, the integration falls back to
 the catalog default and raises a repair issue asking you to pick a model again —
 instead of failing every request.
 
@@ -84,7 +91,7 @@ instead of failing every request.
 
 **Configure** on the entry covers the system prompt, exposed HA API, model,
 `max_tokens`, `temperature`, reasoning mode, cost sensors, budget and catalog
-refresh interval.
+refresh interval. The model is not an option: it lives in the model subentries.
 
 ## Reasoning modes
 
@@ -120,7 +127,7 @@ agent loops up to six tool rounds before answering.
 action: ai_task.generate_data
 data:
   task_name: Evening summary
-  entity_id: ai_task.nous_research
+  entity_id: ai_task.nous_research_hermes_4_405b  # one per model subentry
   instructions: >-
     Summarise the state of the house in three short bullet points.
     Mention open windows and lights that are still on.
@@ -134,6 +141,21 @@ data:
 
 The structured payload comes back in `data`, ready to use in automations.
 
+## Multiple models
+
+An integration entry is one API account: it stores the key, the prompt, the tools
+and the aggregate sensors, and it starts empty (zero agents, zero counters). Models
+are added to it:
+
+- Open the integration entry and pick **Add model**. Every `model` subentry gets its
+  own Assist agent (a `conversation.*` entity, selectable in Assist and in pipelines
+  by its entity id), its own AI Task entity and its own device with cost, token,
+  request and price sensors. Add as many models as you like — a key can be used
+  once, so two fully independent setups need two keys.
+- Subentries share only what belongs to the account: the API key, the prompt, the
+  exposed tools and the aggregate sensors. Everything a model spends is also
+  recorded on its own sensors, so you can chart two models side by side.
+
 ## Sensors
 
 | Entity | State |
@@ -146,8 +168,17 @@ The structured payload comes back in `data`, ready to use in automations.
 | `sensor.nous_research_top_model_today` | Most used model today |
 | `sensor.nous_research_last_request` | Model, tokens and cost of the last call |
 | `sensor.nous_research_available_models` | Number of models in the catalog |
-| `sensor.nous_research_selected_model_input_price` | Prompt price per 1M tokens |
-| `sensor.nous_research_selected_model_output_price` | Completion price per 1M tokens |
+| `sensor.nous_research_free_models` | Free models in the catalog |
+
+Every model subentry adds a device of its own with these sensors (ids follow
+`sensor.nous_research_<model>_…`):
+
+| Entity | State |
+| --- | --- |
+| `…_model_cost_total` / `…_model_cost_today` | Spend of that model in USD |
+| `…_model_input_tokens` / `…_model_output_tokens` | Prompt / completion tokens of that model |
+| `…_model_requests` | Requests made with that model |
+| `…_input_price_per_1m_tokens` / `…_output_price_per_1m_tokens` | Catalog prices per 1M tokens |
 
 Entity ids follow the entry name, so a different **Name** in the setup produces a
 different prefix. `sensor.nous_research_budget_remaining` only exists once a monthly
@@ -227,7 +258,7 @@ nothing is uploaded anywhere else. Diagnostics redact the key.
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements_test.txt
-pytest -q                                      # 68 tests, offline
+pytest -q                                      # 78 tests, offline
 python tools/check_translations.py --strict    # en/pl key parity
 ```
 

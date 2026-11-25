@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.1.3
+
+**A config entry is an API account; models are subentries of it.**
+
+- **Setup asks for the key only.** The entry is created right away with the key,
+  the endpoint and the account defaults; the model is picked afterwards. A fresh
+  entry starts clean: aggregate sensors at zero and no Assist agent or AI Task
+  entity until a model is added.
+- **`model` subentries.** Add one per model from the entry menu (*Add model*).
+  Each subentry gets its own device, its own Assist agent (a `conversation.*`
+  entity, selectable in Assist and in pipelines by entity id), its own AI Task
+  entity and its own cost / token / request / price sensors, all starting at zero.
+  The API key, prompt, exposed tools and aggregate sensors stay on the account.
+- **One key, one entry.** The unique id is derived from the key alone, so the same
+  key cannot be added twice; two fully independent setups need two keys. Duplicate
+  models inside an entry are still rejected with `model_in_use`.
+- **Per-model prices.** Input and output prices come from the live catalog, per
+  model, in USD per 1M tokens with no padding zeros (`0.03`, not `0.0300`).
+- **Migration from 0.1.2.** The stored `chat_model` is dropped from data and
+  options and the entry moves to version 2; cost and token history is kept. The
+  model is added again as a subentry — existing agents disappear until then.
+- **Specific credential errors.** The catalog call doubles as the key check and
+  reports `invalid_auth`, `no_credits`, `rate_limited` or `cannot_connect` on the
+  form instead of a generic connection error.
+- **Repair issue per unknown model.** A subentry whose model left the catalog
+  raises its own issue (id keyed by the account and a hash of the model id) and it
+  clears itself once the subentry points at a catalog model.
+- **Device-based entity names**, so a model agent is called
+  "Nous Research <model>" instead of repeating the title twice.
+- **Diagnostics** list the subentries (type, title, model) with the API key
+  redacted.
+- Local cost tracking (today / 7d / 30d / total, tokens, requests, optional monthly
+  budget), long-term `total` statistics throttled to once per minute, the
+  `nous_research.reset_usage` service, and an English / Polish UI.
+
+PL: Wpis konfiguracji to konto API, a modele są jego podwpisami.
+
+- **Kreator pyta tylko o klucz.** Wpis powstaje od razu z kluczem, adresem
+  i domyślnymi opcjami konta; model wybiera się później. Świeży wpis jest czysty:
+  sensory zbiorcze na zero, brak agenta Assist i encji AI Task do dodania modelu.
+- **Podwpisy `model`.** Dodajesz po jednym na model (*Dodaj model*). Każdy dostaje
+  własne urządzenie, własnego agenta Assist (`conversation.*`, wybieralny w Assist
+  i w pipeline'ach po entity_id), własną encję AI Task oraz swoje sensory kosztu,
+  tokenów, zapytań i cen — wszystkie startują od zera. Klucz API, prompt,
+  wystawione narzędzia i sensory zbiorcze zostają na koncie.
+- **Jeden klucz, jeden wpis.** Unique_id liczy się z samego klucza, więc ten sam
+  klucz nie wejdzie dwa razy; dwa w pełni niezależne zestawy wymagają dwóch
+  kluczy. Duplikat modelu w wpisie nadal kończy się błędem `model_in_use`.
+- **Ceny per model.** Ceny wejścia i wyjścia pochodzą z żywego katalogu, osobno dla
+  każdego modelu, w USD za 1M tokenów bez dopełniania zer (`0.03`, nie `0.0300`).
+- **Migracja z 0.1.2.** Zapisany `chat_model` znika z data i options, wpis
+  przechodzi na wersję 2, historia kosztów i tokenów zostaje. Model dodajesz
+  ponownie jako podwpis — do tego czasu dotychczasowe agenty znikają.
+- **Konkretne błędy poświadczeń.** Wywołanie katalogu jest jednocześnie sprawdzeniem
+  klucza i zwraca na formularzu `invalid_auth`, `no_credits`, `rate_limited` lub
+  `cannot_connect` zamiast ogólnego błędu połączenia.
+- **Repair issue per nieznany model.** Podwpis, którego model zniknął z katalogu,
+  zgłasza własny issue (id z konta i hasha modelu) i sam znika po wskazaniu modelu
+  z katalogu.
+- **Nazwy encji z urządzenia**, więc agent nazywa się „Nous Research <model>” bez
+  powtarzania tytułu.
+- **Diagnostyka** pokazuje podwpisy (typ, tytuł, model) z zamaskowanym kluczem API.
+- Lokalne śledzenie kosztów (dziś / 7d / 30d / suma, tokeny, zapytania, opcjonalny
+  budżet miesięczny), statystyki długoterminowe `total` ograniczone do raz na
+  minutę, usługa `nous_research.reset_usage` oraz interfejs EN / PL.
+
 ## 0.1.2
 
 - New brand assets: the integration icon (light and dark variants) now uses the

@@ -92,6 +92,21 @@ class ModelPricing:
     prompt: float = 0.0
     completion: float = 0.0
     cache_read: float = 0.0
+    # List (pre-discount) prices: the API nests them under ``pricing.original``.
+    list_prompt: float = 0.0
+    list_completion: float = 0.0
+
+    @property
+    def discount(self) -> int:
+        """Return the current discount against the list price, in percent."""
+        if self.list_prompt <= 0 or self.prompt >= self.list_prompt:
+            return 0
+        return round((1 - self.prompt / self.list_prompt) * 100)
+
+    @property
+    def is_free(self) -> bool:
+        """Return True when the model is currently free of charge."""
+        return self.prompt == 0 and self.completion == 0
 
     @classmethod
     def from_api(cls, raw: Any) -> ModelPricing | None:
@@ -108,12 +123,21 @@ class ModelPricing:
         prompt = _price(source, _PROMPT_KEYS)
         completion = _price(source, _COMPLETION_KEYS)
         cache_read = _price(source, _CACHE_READ_KEYS)
+        original = source.get("original")
+        list_prompt = (
+            _price(original, _PROMPT_KEYS) if isinstance(original, dict) else None
+        )
+        list_completion = (
+            _price(original, _COMPLETION_KEYS) if isinstance(original, dict) else None
+        )
         if prompt is None and completion is None and cache_read is None:
             return None
         return cls(
             prompt=prompt or 0.0,
             completion=completion or 0.0,
             cache_read=cache_read or 0.0,
+            list_prompt=list_prompt or 0.0,
+            list_completion=list_completion or 0.0,
         )
 
 
@@ -137,6 +161,7 @@ class CostTracker:
         self._total_tokens_out = 0
         self._total_requests = 0
         self._days: dict[str, dict[str, Any]] = {}
+        self._model_lifetime: dict[str, dict[str, Any]] = {}
         self._last_request: dict[str, Any] | None = None
         self._unknown_models: set[str] = set()
         self._pruned_day: str | None = None
@@ -213,6 +238,14 @@ class CostTracker:
                     cleaned[key] = self._clean_bucket(bucket)
             data["days"] = cleaned
 
+        models = old_data.get("models")
+        if isinstance(models, dict):
+            cleaned_models: dict[str, dict[str, Any]] = {}
+            for model, stats in models.items():
+                if isinstance(model, str) and isinstance(stats, dict):
+                    cleaned_models[model] = self._clean_total(stats)
+            data["models"] = cleaned_models
+
         last_request = old_data.get("last_request")
         if isinstance(last_request, dict):
             data["last_request"] = dict(last_request)
@@ -223,6 +256,7 @@ class CostTracker:
         """Return the empty storage payload."""
         return {
             "total": {"cost": 0.0, "tokens_in": 0, "tokens_out": 0, "requests": 0},
+            "models": {},
             "days": {},
             "last_request": None,
         }
@@ -282,6 +316,12 @@ class CostTracker:
         if isinstance(last_request, dict):
             self._last_request = dict(last_request)
 
+        models = data.get("models")
+        if isinstance(models, dict):
+            for model, stats in models.items():
+                if isinstance(model, str) and isinstance(stats, dict):
+                    self._model_lifetime[model] = self._clean_total(stats)
+
     def _reset_state(self) -> None:
         """Drop every in memory counter."""
         self._total_cost = 0.0
@@ -289,6 +329,7 @@ class CostTracker:
         self._total_tokens_out = 0
         self._total_requests = 0
         self._days = {}
+        self._model_lifetime = {}
         self._last_request = None
         self._unknown_models = set()
 
@@ -301,6 +342,7 @@ class CostTracker:
                 "tokens_out": self._total_tokens_out,
                 "requests": self._total_requests,
             },
+            "models": self._model_lifetime,
             "days": self._days,
             "last_request": self._last_request,
         }
@@ -398,6 +440,14 @@ class CostTracker:
         model_bucket["tokens_in"] += tokens_in
         model_bucket["tokens_out"] += tokens_out
         model_bucket["requests"] += 1
+
+        lifetime = self._model_lifetime.setdefault(
+            model, dict.fromkeys(BUCKET_KEYS, 0)
+        )
+        lifetime["cost"] = round(lifetime["cost"] + usd, 10)
+        lifetime["tokens_in"] += tokens_in
+        lifetime["tokens_out"] += tokens_out
+        lifetime["requests"] += 1
 
         self._last_request = {
             "model": model,
@@ -498,6 +548,29 @@ class CostTracker:
     def unknown_models(self) -> list[str]:
         """Return the models seen without pricing information."""
         return sorted(self._unknown_models)
+
+    @staticmethod
+    def _normalise_stats(raw: Any) -> dict[str, Any]:
+        """Return a complete stats dict for a possibly missing model entry."""
+        stats = raw if isinstance(raw, dict) else {}
+        return {
+            "cost": _as_float(stats.get("cost")),
+            "tokens_in": _as_int(stats.get("tokens_in")),
+            "tokens_out": _as_int(stats.get("tokens_out")),
+            "requests": _as_int(stats.get("requests")),
+        }
+
+    def model_lifetime(self, model: str) -> dict[str, Any]:
+        """Return the lifetime totals recorded for one model."""
+        return self._normalise_stats(self._model_lifetime.get(model))
+
+    def model_today(self, model: str) -> dict[str, Any]:
+        """Return today's totals recorded for one model."""
+        bucket = self._days.get(day_key()) or {}
+        models = bucket.get("models") if isinstance(bucket, dict) else None
+        if not isinstance(models, dict):
+            return self._normalise_stats(None)
+        return self._normalise_stats(models.get(model))
 
     # ------------------------------------------------------------------
     # Reporting helpers

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+import hashlib
 import inspect
 import logging
 from typing import TYPE_CHECKING, Any, cast
@@ -40,6 +41,7 @@ from .const import (
     DEFAULT_CATALOG_INTERVAL,
     DOMAIN,
     SERVICE_RESET_USAGE,
+    SUBENTRY_TYPE_MODEL,
 )
 
 if TYPE_CHECKING:
@@ -48,6 +50,28 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__package__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate an entry to the account-only layout.
+
+    Before 0.2.0 an entry stored one chat model and served it as its "primary"
+    agent. Entries are API accounts now: the key stays, the model key is
+    dropped and models are added as ``model`` subentries. Existing entries keep
+    their cost history; the stale model key would only confuse the settings.
+    """
+    if entry.version >= 2:
+        return True
+
+    data = {key: value for key, value in entry.data.items() if key != CONF_CHAT_MODEL}
+    options = {
+        key: value for key, value in entry.options.items() if key != CONF_CHAT_MODEL
+    }
+    hass.config_entries.async_update_entry(
+        entry, data=data, options=options, version=2
+    )
+    _LOGGER.debug("Migrated %s entry %s to version 2", DOMAIN, entry.entry_id)
+    return True
 
 PLATFORMS = [Platform.CONVERSATION, Platform.AI_TASK, Platform.SENSOR]
 
@@ -166,11 +190,6 @@ async def async_reload_entry(hass: HomeAssistant, entry: NousConfigEntry) -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate an old config entry (no migrations needed yet)."""
-    return True
-
-
 async def _async_options_updated(hass: HomeAssistant, entry: NousConfigEntry) -> None:
     """Reload the entry when its options change."""
     await hass.config_entries.async_reload(entry.entry_id)
@@ -180,26 +199,61 @@ async def _async_options_updated(hass: HomeAssistant, entry: NousConfigEntry) ->
 def _async_sync_model_issue(
     hass: HomeAssistant, entry: NousConfigEntry, catalog: list[dict[str, Any]]
 ) -> None:
-    """Raise an issue while the configured model is absent from the catalog.
+    """Raise one issue per model subentry whose model left the catalog.
 
-    The catalog is namespaced (``vendor/model``) and evolves, so a hardcoded or
-    renamed id silently breaks every request. The issue tells the user to pick
-    a model again instead of failing without explanation.
+    The catalog is namespaced (``vendor/model``) and evolves, so a stale or
+    renamed id silently breaks every request of that one model. A config entry
+    itself stores no model: each ``model`` subentry is checked separately and
+    its issue disappears again as soon as the id is valid, the subentry is
+    changed or removed.
     """
-    configured = str(({**entry.data, **entry.options}).get(CONF_CHAT_MODEL) or "")
-    issue_id = f"unknown_model_{entry.entry_id}"
-    if configured and catalog and not known_model(configured, catalog):
+    models = {
+        str(subentry.data.get(CONF_CHAT_MODEL) or "").strip()
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_TYPE_MODEL
+    }
+    stale = {model for model in models if model and not known_model(model, catalog)}
+
+    prefix = f"unknown_model_{entry.entry_id}_"
+    keep = {_model_issue_id(entry, model) for model in stale}
+    for issue_id in _async_issue_ids(hass):
+        if issue_id.startswith(prefix) and issue_id not in keep:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+    # Issues created before 0.2.0 were keyed by the entry alone.
+    ir.async_delete_issue(hass, DOMAIN, f"unknown_model_{entry.entry_id}")
+
+    for model in stale:
         ir.async_create_issue(
             hass,
             DOMAIN,
-            issue_id,
+            _model_issue_id(entry, model),
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="unknown_model",
-            translation_placeholders={"model": configured},
+            translation_placeholders={"model": model},
         )
-    else:
-        ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
+@callback
+def _async_issue_ids(hass: HomeAssistant) -> list[str]:
+    """Return the issue ids of this integration.
+
+    The repair registry keeps its entries under ``(domain, issue_id)``; the
+    helper keeps the sweep independent of that internal layout.
+    """
+    registry = ir.async_get(hass)
+    ids: list[str] = []
+    for key in list(getattr(registry, "issues", {})):
+        domain, issue_id = key if isinstance(key, tuple) else (DOMAIN, str(key))
+        if domain == DOMAIN:
+            ids.append(issue_id)
+    return ids
+
+
+def _model_issue_id(entry: ConfigEntry, model: str) -> str:
+    """Return a stable issue id for one model of one entry."""
+    digest = hashlib.sha1(model.encode()).hexdigest()[:10]
+    return f"unknown_model_{entry.entry_id}_{digest}"
 
 
 def _async_resolve_entry(hass: HomeAssistant, entry_id: str | None) -> NousConfigEntry:

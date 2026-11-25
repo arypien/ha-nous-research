@@ -1,9 +1,27 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "This API key is already configured for this model. Pick another model or add it as a subentry."
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the Nous Research API.",
+      "invalid_auth": "Invalid API key.",
+      "invalid_url": "Invalid API base URL.",
+      "model_in_use": "This model is already used by this entry or one of its subentries.",
+      "model_required": "Choose a model from the list or paste a model ID.",
+      "no_credits": "The account has no credits left.",
+      "rate_limited": "Rate limit reached. Try again in a moment.",
+      "unknown": "Unexpected error."
+    },
     "step": {
+      "reauth_confirm": {
+        "data": {
+          "api_key": "API key"
+        },
+        "description": "The API key was rejected by the Nous Research API. Enter a new key from portal.nousresearch.com.",
+        "title": "Reauthenticate Nous Research"
+      },
       "user": {
-        "title": "Nous Research",
-        "description": "Connect Home Assistant to the Nous Research inference API. Create an API key at portal.nousresearch.com and paste it below.",
         "data": {
           "api_key": "API key",
           "base_url": "Base URL",
@@ -13,82 +31,111 @@
           "api_key": "Key from portal.nousresearch.com. It is sent as a Bearer token and stored in the config entry.",
           "base_url": "OpenAI-compatible endpoint. Keep the default unless you route requests through a proxy.",
           "name": "Name of this integration entry."
-        }
-      },
-      "reauth_confirm": {
-        "title": "Reauthenticate Nous Research",
-        "description": "The API key was rejected by the Nous Research API. Enter a new key from portal.nousresearch.com.",
-        "data": {
-          "api_key": "API key"
-        }
-      },
-      "model": {
-        "title": "Choose a model",
-        "description": "Pick the chat model this entry should use. The list comes from the model catalog of the configured endpoint; you can also paste any other model ID.",
-        "data": {
-          "chat_model": "Model"
         },
-        "data_description": {
-          "chat_model": "Model ID exactly as reported by /v1/models, e.g. vendor/model-name."
-        }
+        "description": "Connect Home Assistant to the Nous Research inference API. The entry stores the API key and creates the account sensors; every model is added afterwards as a subentry with its own agent and figures. Create a key at portal.nousresearch.com.",
+        "title": "Nous Research"
       }
-    },
-    "abort": {
-      "already_configured": "This API key is already configured."
-    },
-    "error": {
-      "invalid_auth": "Invalid API key.",
-      "no_credits": "The account has no credits left.",
-      "rate_limited": "Rate limit reached. Try again in a moment.",
-      "cannot_connect": "Cannot reach the Nous Research API.",
-      "unknown": "Unexpected error.",
-      "invalid_url": "Invalid API base URL.",
-      "model_required": "Choose a model from the list or paste a model ID."
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Nous Research options",
-        "description": "Tune the agent behaviour, cost tracking and catalog refresh.",
-        "data": {
-          "prompt": "System prompt",
-          "llm_hass_api": "Home Assistant control",
-          "chat_model": "Model",
-          "max_tokens": "Max tokens",
-          "temperature": "Temperature",
-          "reasoning_mode": "Reasoning mode",
-          "cost_sensors": "Cost sensors",
-          "budget_usd": "Budget (USD)",
-          "catalog_interval": "Catalog refresh interval (hours)"
+  "config_subentries": {
+    "model": {
+      "abort": {
+        "reconfigure_successful": "The model was updated."
+      },
+      "entry_type": "Model",
+      "error": {
+        "cannot_connect": "Cannot reach the Nous Research API.",
+        "invalid_auth": "Invalid API key.",
+        "model_in_use": "This model already has a subentry on this entry.",
+        "model_required": "Choose a model from the list or paste a model ID.",
+        "no_credits": "The account has no credits left.",
+        "rate_limited": "Rate limit reached. Try again in a moment.",
+        "unknown": "Unexpected error."
+      },
+      "initiate_flow": {
+        "reconfigure": "Reconfigure model",
+        "user": "Add model"
+      },
+      "step": {
+        "reconfigure": {
+          "data": {
+            "chat_model": "Model",
+            "name": "Name"
+          },
+          "data_description": {
+            "chat_model": "Model ID from the catalog of this entry's endpoint, or any custom model ID.",
+            "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
+          },
+          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.",
+          "title": "Reconfigure model"
         },
-        "data_description": {
-          "prompt": "Instructions prepended to every conversation. Leave empty to use the built-in assistant prompt.",
-          "llm_hass_api": "Expose Home Assistant entities and services to the model as tools.",
-          "chat_model": "Model used for new conversations. Existing entities keep their model until reloaded.",
-          "max_tokens": "Upper bound for the completion, thinking tokens included.",
-          "temperature": "Sampling temperature. 0.2-0.5 works well for control tasks.",
-          "reasoning_mode": "How thinking is triggered. See the README for the exact prompt.",
-          "cost_sensors": "Create the cost and token sensors for this entry.",
-          "budget_usd": "Monthly budget used for the budget remaining sensor. 0 disables it.",
-          "catalog_interval": "How often the model catalog and prices are refreshed."
+        "user": {
+          "data": {
+            "chat_model": "Model",
+            "name": "Name"
+          },
+          "data_description": {
+            "chat_model": "Model ID from the catalog of this entry's endpoint, or any custom model ID.",
+            "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
+          },
+          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.",
+          "title": "Add model"
         }
       }
     }
   },
   "entity": {
     "sensor": {
-      "cost_total": {
-        "name": "Cost total"
+      "budget_remaining": {
+        "name": "Budget remaining"
       },
-      "cost_today": {
-        "name": "Cost today"
+      "catalog_free_models": {
+        "name": "Free models"
+      },
+      "catalog_models": {
+        "name": "Available models"
+      },
+      "catalog_promotions": {
+        "name": "Model promotions"
+      },
+      "cost_30d": {
+        "name": "Cost last 30 days"
       },
       "cost_7d": {
         "name": "Cost last 7 days"
       },
-      "cost_30d": {
-        "name": "Cost last 30 days"
+      "cost_today": {
+        "name": "Cost today"
+      },
+      "cost_total": {
+        "name": "Cost total"
+      },
+      "last_request": {
+        "name": "Last request"
+      },
+      "model_cost_today": {
+        "name": "Model cost today"
+      },
+      "model_cost_total": {
+        "name": "Model cost total"
+      },
+      "model_input_price": {
+        "name": "Input price (per 1M tokens)"
+      },
+      "model_output_price": {
+        "name": "Output price (per 1M tokens)"
+      },
+      "model_requests": {
+        "name": "Model requests"
+      },
+      "model_tokens_in": {
+        "name": "Model input tokens"
+      },
+      "model_tokens_out": {
+        "name": "Model output tokens"
+      },
+      "requests_total": {
+        "name": "Requests total"
       },
       "tokens_in_total": {
         "name": "Input tokens total"
@@ -96,32 +143,20 @@
       "tokens_out_total": {
         "name": "Output tokens total"
       },
-      "requests_total": {
-        "name": "Requests total"
-      },
       "top_model_today": {
         "name": "Top model today"
-      },
-      "last_request": {
-        "name": "Last request"
-      },
-      "budget_remaining": {
-        "name": "Budget remaining"
-      },
-      "catalog_models": {
-        "name": "Available models"
-      },
-      "selected_model_input_price": {
-        "name": "Selected model input price"
-      },
-      "selected_model_output_price": {
-        "name": "Selected model output price"
       }
     }
   },
   "exceptions": {
+    "api": {
+      "message": "The Nous Research API returned an error."
+    },
     "auth": {
       "message": "Authentication failed. Check the API key."
+    },
+    "image_unsupported": {
+      "message": "The selected model does not accept images."
     },
     "no_credits": {
       "message": "The Nous Research account has no credits left. Top up at portal.nousresearch.com."
@@ -129,47 +164,75 @@
     "rate_limit": {
       "message": "Rate limit reached. The request was not sent."
     },
-    "api": {
-      "message": "The Nous Research API returned an error."
-    },
     "structured_error": {
       "message": "The model returned a structured response that could not be parsed."
+    }
+  },
+  "issues": {
+    "unknown_model": {
+      "description": "The configured model `{model}` is not offered by the API catalog. Open the integration options and pick a model, otherwise every request fails.",
+      "title": "Model not in catalog"
+    }
+  },
+  "options": {
+    "error": {
+      "already_configured": "This API key is already configured for this model in another entry.",
+      "model_in_use": "This model is already used by one of the subentries of this entry."
     },
-    "image_unsupported": {
-      "message": "The selected model does not accept images."
+    "step": {
+      "init": {
+        "data": {
+          "budget_usd": "Budget (USD)",
+          "catalog_interval": "Catalog refresh interval (hours)",
+          "chat_model": "Model",
+          "cost_sensors": "Cost sensors",
+          "llm_hass_api": "Home Assistant control",
+          "max_tokens": "Max tokens",
+          "prompt": "System prompt",
+          "reasoning_mode": "Reasoning mode",
+          "temperature": "Temperature"
+        },
+        "data_description": {
+          "budget_usd": "Monthly budget used for the budget remaining sensor. 0 disables it.",
+          "catalog_interval": "How often the model catalog and prices are refreshed.",
+          "chat_model": "Model used for new conversations. Existing entities keep their model until reloaded.",
+          "cost_sensors": "Create the cost and token sensors for this entry.",
+          "llm_hass_api": "Expose Home Assistant entities and services to the model as tools.",
+          "max_tokens": "Upper bound for the completion, thinking tokens included.",
+          "prompt": "Instructions prepended to every conversation. Leave empty to use the built-in assistant prompt.",
+          "reasoning_mode": "How thinking is triggered. See the README for the exact prompt.",
+          "temperature": "Sampling temperature. 0.2-0.5 works well for control tasks."
+        },
+        "description": "Tune the agent behaviour, cost tracking and catalog refresh.",
+        "title": "Nous Research options"
+      }
+    }
+  },
+  "selector": {
+    "llm_hass_api": {
+      "options": {
+        "assist": "Assist",
+        "conversation": "Assist + conversation",
+        "none": "No control"
+      }
+    },
+    "reasoning_mode": {
+      "options": {
+        "none": "Off (faster, cheaper)",
+        "prefill": "Prefill think tag",
+        "prompt": "System prompt (recommended for Hermes 4)"
+      }
     }
   },
   "services": {
     "reset_usage": {
-      "name": "Reset usage",
       "description": "Clear the locally tracked cost and token counters for a Nous Research entry.",
       "fields": {
         "entry_id": {
           "name": "Entry"
         }
-      }
-    }
-  },
-  "selector": {
-    "reasoning_mode": {
-      "options": {
-        "none": "Off (faster, cheaper)",
-        "prompt": "System prompt (recommended for Hermes 4)",
-        "prefill": "Prefill think tag"
-      }
-    },
-    "llm_hass_api": {
-      "options": {
-        "none": "No control",
-        "assist": "Assist",
-        "conversation": "Assist + conversation"
-      }
-    }
-  },
-  "issues": {
-    "unknown_model": {
-      "title": "Model not in catalog",
-      "description": "The configured model `{model}` is not offered by the API catalog. Open the integration options and pick a model, otherwise every request fails."
+      },
+      "name": "Reset usage"
     }
   }
 }

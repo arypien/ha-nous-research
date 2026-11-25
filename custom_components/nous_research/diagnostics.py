@@ -9,6 +9,8 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_API_KEY
 from homeassistant.core import HomeAssistant
 
+from .const import CONF_CHAT_MODEL
+
 if TYPE_CHECKING:
     from . import NousConfigEntry
 
@@ -40,6 +42,17 @@ async def async_get_config_entry_diagnostics(
             "data": _redact(dict(entry.data)),
             "options": _redact(dict(entry.options)),
         },
+        "subentries": [
+            {
+                "subentry_id": subentry.subentry_id,
+                "subentry_type": subentry.subentry_type,
+                "title": subentry.title,
+                "unique_id": subentry.unique_id,
+                "model": subentry.data.get(CONF_CHAT_MODEL),
+                "data": _redact(dict(subentry.data)),
+            }
+            for subentry in entry.subentries.values()
+        ],
         "catalog": {
             "models": len(catalog),
             "last_update_success": runtime.catalog.last_update_success,

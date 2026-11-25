@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import probatio
 
@@ -37,9 +37,14 @@ from .const import (
 )
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigSubentry
+
     from . import NousConfigEntry
 
 MANUFACTURER = "Nous Research"
+
+# Device names are free text; keep them short enough for the registry UI.
+_DEVICE_NAME_MAX: Final = 120
 
 # The API client pre-fills this to force models into a reasoning block.
 PREFILL_THINKING = " thinking"
@@ -207,23 +212,57 @@ class NousBaseEntity(Entity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(self, entry: NousConfigEntry) -> None:
-        """Initialize the entity from the entry runtime data."""
+    def __init__(
+        self, entry: NousConfigEntry, subentry: ConfigSubentry | None = None
+    ) -> None:
+        """Initialize the entity from the entry runtime data.
+
+        ``subentry`` identifies the extra model an entity serves; it overrides
+        the entry settings for that entity only.
+        """
         self.entry = entry
+        self.subentry = subentry
         self.client = entry.runtime_data.client
         self.tracker = entry.runtime_data.tracker
+        # One device per subentry: a device belongs to a single config subentry
+        # and moving an existing device between subentries makes HA drop the
+        # entities that were registered under the old subentry. Keep the entry
+        # device stable and give every model subentry a device of its own.
+        if subentry is None:
+            identifiers = {(DOMAIN, entry.entry_id)}
+            device_name = entry.title
+        else:
+            identifiers = {(DOMAIN, f"{entry.entry_id}_{subentry.subentry_id}")}
+            # The model devices sit next to the account device, so their name
+            # carries the subentry title to stay distinguishable in the UI.
+            device_name = f"{entry.title} {subentry.title}"[:_DEVICE_NAME_MAX]
         self._attr_device_info = dr.DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            identifiers=identifiers,
+            name=device_name,
             manufacturer=MANUFACTURER,
-            model=self._model,
+            model=self._device_model,
             entry_type=dr.DeviceEntryType.SERVICE,
         )
 
     @property
     def _settings(self) -> dict[str, Any]:
-        """Return entry data with options taking precedence."""
-        return {**self.entry.data, **self.entry.options}
+        """Return entry data, then options, then subentry data on top."""
+        settings = {**self.entry.data, **self.entry.options}
+        if self.subentry is not None:
+            settings.update(self.subentry.data)
+        return settings
+
+    @property
+    def _device_model(self) -> str:
+        """Return the model this entity serves, as shown on its device.
+
+        A config entry is an API account and carries no model of its own; only
+        ``model`` subentries do, so the account device is labelled as the API.
+        """
+        configured = str(self._settings.get(CONF_CHAT_MODEL) or "").strip()
+        if not configured:
+            return "API account"
+        return resolve_model(configured, self._catalog)
 
     @property
     def _catalog(self) -> list[dict[str, Any]]:
@@ -237,9 +276,14 @@ class NousBaseEntity(Entity):
         """Return the model to use, resolved against the live catalog.
 
         The catalog is namespaced and evolves, so a stale or renamed id would
-        make every request fail; the catalog default is the fallback.
+        make every request fail; the catalog default is the fallback. Entities
+        without a configured model (the API account device) have no agent.
         """
-        configured = str(self._settings.get(CONF_CHAT_MODEL) or "")
+        configured = str(self._settings.get(CONF_CHAT_MODEL) or "").strip()
+        if not configured:
+            raise HomeAssistantError(
+                "No model is configured for this entity; add a model subentry."
+            )
         return resolve_model(configured, self._catalog)
 
     def _build_messages(

@@ -23,18 +23,19 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .catalog import resolve_model
 from .const import (
     CONF_BUDGET,
     CONF_CHAT_MODEL,
     CONF_COST_SENSORS,
     COST_UPDATE_SIGNAL,
-    DEFAULT_CHAT_MODEL,
     DOMAIN,
+    SUBENTRY_TYPE_MODEL,
 )
 from .entity import NousBaseEntity
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigSubentry
+
     from . import NousConfigEntry
 
 # Entities are push based (dispatcher) or coordinator driven; never poll.
@@ -172,6 +173,81 @@ def _value_catalog_models(
     return len(models)
 
 
+def _catalog_split(
+    models: list[dict[str, Any]], entry: NousConfigEntry
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Return the free model ids and the discounted models of the catalog."""
+    tracker = entry.runtime_data.tracker
+    free_models: list[str] = []
+    promotions: list[dict[str, Any]] = []
+
+    for model in models:
+        model_id = _model_id(model)
+        pricing = tracker.pricing_for(model_id)
+        if pricing is None:
+            continue
+        if pricing.is_free:
+            free_models.append(model_id)
+        discount = pricing.discount
+        if discount:
+            promotions.append(
+                {
+                    "model": model_id,
+                    "discount_pct": discount,
+                    "input_per_mtok": _price_per_mtok(pricing.prompt),
+                    "output_per_mtok": _price_per_mtok(pricing.completion),
+                    "list_input_per_mtok": _price_per_mtok(pricing.list_prompt),
+                    "list_output_per_mtok": _price_per_mtok(pricing.list_completion),
+                }
+            )
+
+    free_models.sort()
+    promotions.sort(key=lambda item: (-int(item["discount_pct"]), str(item["model"])))
+    return free_models, promotions
+
+
+def _value_catalog_free_models(
+    models: list[dict[str, Any]], entry: NousConfigEntry
+) -> int:
+    """Return the number of models that are currently free of charge."""
+    free_models, _ = _catalog_split(models, entry)
+    return len(free_models)
+
+
+def _attributes_catalog_free_models(
+    models: list[dict[str, Any]], entry: NousConfigEntry
+) -> dict[str, Any]:
+    """Return the free model ids of the catalog."""
+    free_models, _ = _catalog_split(models, entry)
+    return {
+        "models": free_models,
+        "count": len(free_models),
+    }
+
+
+def _value_catalog_promotions(
+    models: list[dict[str, Any]], entry: NousConfigEntry
+) -> int:
+    """Return the number of models that are currently on promotion."""
+    _, promotions = _catalog_split(models, entry)
+    return len(promotions)
+
+
+def _attributes_catalog_promotions(
+    models: list[dict[str, Any]], entry: NousConfigEntry
+) -> dict[str, Any]:
+    """Return the discounted models of the catalog with their list prices."""
+    _, promotions = _catalog_split(models, entry)
+    best = promotions[0] if promotions else None
+    return {
+        "models": [item["model"] for item in promotions],
+        "promotions": promotions,
+        "count": len(promotions),
+        "best_discount_pct": None if best is None else best["discount_pct"],
+        "best_model": None if best is None else best["model"],
+    }
+
+
 def _attributes_catalog_models(
     models: list[dict[str, Any]], entry: NousConfigEntry
 ) -> dict[str, Any]:
@@ -192,47 +268,16 @@ def _attributes_catalog_models(
         if price is not None and (cheapest is None or price < cheapest):
             cheapest = price
 
+    free_models, promotions = _catalog_split(models, entry)
+
     return {
         "tool_capable": tool_capable,
         "cheapest_input_per_mtok": cheapest,
         "with_pricing": with_pricing,
-    }
-
-
-def _value_selected_model_input_price(
-    models: list[dict[str, Any]], entry: NousConfigEntry
-) -> float | None:
-    """Return the input price of the configured model per 1M tokens."""
-    pricing = _selected_model_pricing(models, entry)
-    return None if pricing is None else _price_per_mtok(pricing.prompt)
-
-
-def _value_selected_model_output_price(
-    models: list[dict[str, Any]], entry: NousConfigEntry
-) -> float | None:
-    """Return the output price of the configured model per 1M tokens."""
-    pricing = _selected_model_pricing(models, entry)
-    return None if pricing is None else _price_per_mtok(pricing.completion)
-
-
-def _attributes_selected_model_price(
-    models: list[dict[str, Any]], entry: NousConfigEntry
-) -> dict[str, Any]:
-    """Return pricing attributes for the selected model sensors."""
-    model_id, model = _selected_model(models, entry)
-    pricing = _selected_model_pricing(models, entry)
-    return {
-        "model": model_id,
-        "input_per_mtok": (
-            None if pricing is None else _price_per_mtok(pricing.prompt)
-        ),
-        "output_per_mtok": (
-            None if pricing is None else _price_per_mtok(pricing.completion)
-        ),
-        "cache_read_per_mtok": (
-            None if pricing is None else _price_per_mtok(pricing.cache_read)
-        ),
-        "context_length": _context_length(model),
+        "free_models": free_models,
+        "free_model_count": len(free_models),
+        "promotions": promotions,
+        "promo_count": len(promotions),
     }
 
 
@@ -318,33 +363,168 @@ def _context_length(model: dict[str, Any] | None) -> int | None:
     return None
 
 
-def _selected_model_id(entry: NousConfigEntry) -> str:
-    """Return the configured chat model, resolved against the catalog."""
-    value = _entry_option(entry, CONF_CHAT_MODEL)
-    runtime = getattr(entry, "runtime_data", None)
-    coordinator = getattr(runtime, "catalog", None)
-    return resolve_model(
-        str(value or DEFAULT_CHAT_MODEL), getattr(coordinator, "data", None)
-    )
+# ---------------------------------------------------------------------------
+# Per model sensors
+# ---------------------------------------------------------------------------
+# A config entry is an API account and only carries aggregates. Every ``model``
+# subentry is a device of its own, holding its agent, its AI Task entity and
+# the figures below.
+def _model_id_of(subentry: Any) -> str:
+    """Return the model id stored on a model subentry."""
+    return str((getattr(subentry, "data", None) or {}).get(CONF_CHAT_MODEL) or "").strip()
 
 
-def _selected_model(
-    models: list[dict[str, Any]], entry: NousConfigEntry
-) -> tuple[str, dict[str, Any] | None]:
-    """Return the configured model and its catalog entry."""
-    model_id = _selected_model_id(entry)
-    for model in models:
-        if _model_id(model) == model_id:
-            return model_id, model
-    return model_id, None
+def _model_lifetime(entry: NousConfigEntry, model_id: str) -> dict[str, Any]:
+    """Return the lifetime totals recorded for ``model_id``."""
+    return entry.runtime_data.tracker.model_lifetime(model_id)
 
 
-def _selected_model_pricing(
-    models: list[dict[str, Any]], entry: NousConfigEntry
-) -> Any:
-    """Return the pricing of the configured model, if known."""
-    model_id, _ = _selected_model(models, entry)
+def _model_today(entry: NousConfigEntry, model_id: str) -> dict[str, Any]:
+    """Return today's totals recorded for ``model_id``."""
+    return entry.runtime_data.tracker.model_today(model_id)
+
+
+def _no_model_value(entry: NousConfigEntry, model_id: str) -> Any:
+    """Return no value (placeholder for the description default)."""
+    return None
+
+
+def _value_model_cost_total(entry: NousConfigEntry, model_id: str) -> float:
+    """Return the lifetime cost of one model."""
+    return float(_model_lifetime(entry, model_id)["cost"])
+
+
+def _value_model_cost_today(entry: NousConfigEntry, model_id: str) -> float:
+    """Return the cost one model accumulated today."""
+    return float(_model_today(entry, model_id)["cost"])
+
+
+def _value_model_tokens_in(entry: NousConfigEntry, model_id: str) -> int:
+    """Return the lifetime input tokens of one model."""
+    return int(_model_lifetime(entry, model_id)["tokens_in"])
+
+
+def _value_model_tokens_out(entry: NousConfigEntry, model_id: str) -> int:
+    """Return the lifetime output tokens of one model."""
+    return int(_model_lifetime(entry, model_id)["tokens_out"])
+
+
+def _value_model_requests(entry: NousConfigEntry, model_id: str) -> int:
+    """Return the lifetime request count of one model."""
+    return int(_model_lifetime(entry, model_id)["requests"])
+
+
+def _model_pricing(entry: NousConfigEntry, model_id: str) -> Any:
+    """Return the live pricing of one model, when the catalog knows it."""
     return entry.runtime_data.tracker.pricing_for(model_id)
+
+
+def _value_model_price_in(entry: NousConfigEntry, model_id: str) -> float | None:
+    """Return the input price of one model per 1M tokens."""
+    pricing = _model_pricing(entry, model_id)
+    return None if pricing is None else _price_per_mtok(pricing.prompt)
+
+
+def _value_model_price_out(entry: NousConfigEntry, model_id: str) -> float | None:
+    """Return the output price of one model per 1M tokens."""
+    pricing = _model_pricing(entry, model_id)
+    return None if pricing is None else _price_per_mtok(pricing.completion)
+
+
+def _attributes_model_price(entry: NousConfigEntry, model_id: str) -> dict[str, Any]:
+    """Return pricing attributes of one model."""
+    pricing = _model_pricing(entry, model_id)
+    if pricing is None:
+        return {"model": model_id, "priced": False}
+    return {
+        "model": model_id,
+        "priced": True,
+        "input_per_mtok": _price_per_mtok(pricing.prompt),
+        "output_per_mtok": _price_per_mtok(pricing.completion),
+        "list_input_per_mtok": _price_per_mtok(pricing.list_prompt),
+        "list_output_per_mtok": _price_per_mtok(pricing.list_completion),
+        "discount_pct": pricing.discount,
+        "is_free": pricing.is_free,
+    }
+
+
+@dataclass(frozen=True, kw_only=True)
+class NousModelSensorDescription(SensorEntityDescription):
+    """Description of a per model sensor."""
+
+    value_fn: Callable[[NousConfigEntry, str], Any] = _no_model_value
+    attributes_fn: (
+        Callable[[NousConfigEntry, str], dict[str, Any]] | None
+    ) = None
+
+
+MODEL_SENSOR_DESCRIPTIONS: Final[tuple[NousModelSensorDescription, ...]] = (
+    NousModelSensorDescription(
+        key="model_cost_total",
+        translation_key="model_cost_total",
+        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement=_CURRENCY_USD,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=_PRICE_DIGITS,
+        icon="mdi:cash-multiple",
+        value_fn=_value_model_cost_total,
+    ),
+    NousModelSensorDescription(
+        key="model_cost_today",
+        translation_key="model_cost_today",
+        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement=_CURRENCY_USD,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=_PRICE_DIGITS,
+        icon="mdi:cash-clock",
+        value_fn=_value_model_cost_today,
+    ),
+    NousModelSensorDescription(
+        key="model_tokens_in",
+        translation_key="model_tokens_in",
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        icon="mdi:upload",
+        value_fn=_value_model_tokens_in,
+    ),
+    NousModelSensorDescription(
+        key="model_tokens_out",
+        translation_key="model_tokens_out",
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        icon="mdi:download",
+        value_fn=_value_model_tokens_out,
+    ),
+    NousModelSensorDescription(
+        key="model_requests",
+        translation_key="model_requests",
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        icon="mdi:counter",
+        value_fn=_value_model_requests,
+    ),
+    NousModelSensorDescription(
+        key="model_input_price",
+        translation_key="model_input_price",
+        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement=_CURRENCY_USD,
+        # No fixed precision: 0.03 USD stays "0.03" instead of "0.0300".
+        suggested_display_precision=None,
+        icon="mdi:cash-plus",
+        value_fn=_value_model_price_in,
+        attributes_fn=_attributes_model_price,
+    ),
+    NousModelSensorDescription(
+        key="model_output_price",
+        translation_key="model_output_price",
+        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement=_CURRENCY_USD,
+        suggested_display_precision=None,
+        icon="mdi:cash-check",
+        value_fn=_value_model_price_out,
+        attributes_fn=_attributes_model_price,
+    ),
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -469,26 +649,22 @@ CATALOG_SENSOR_DESCRIPTIONS: Final[tuple[NousCatalogSensorDescription, ...]] = (
         attributes_fn=_attributes_catalog_models,
     ),
     NousCatalogSensorDescription(
-        key="selected_model_input_price",
-        translation_key="selected_model_input_price",
-        device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=_CURRENCY_USD,
-        # No fixed precision: 0.03 USD stays "0.03" instead of "0.0300".
-        suggested_display_precision=None,
-        icon="mdi:cash-plus",
-        value_fn=_value_selected_model_input_price,
-        attributes_fn=_attributes_selected_model_price,
+        key="catalog_free_models",
+        translation_key="catalog_free_models",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        icon="mdi:gift-outline",
+        value_fn=_value_catalog_free_models,
+        attributes_fn=_attributes_catalog_free_models,
     ),
     NousCatalogSensorDescription(
-        key="selected_model_output_price",
-        translation_key="selected_model_output_price",
-        device_class=SensorDeviceClass.MONETARY,
-        native_unit_of_measurement=_CURRENCY_USD,
-        # No fixed precision: 0.03 USD stays "0.03" instead of "0.0300".
-        suggested_display_precision=None,
-        icon="mdi:cash-check",
-        value_fn=_value_selected_model_output_price,
-        attributes_fn=_attributes_selected_model_price,
+        key="catalog_promotions",
+        translation_key="catalog_promotions",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        icon="mdi:tag-multiple-outline",
+        value_fn=_value_catalog_promotions,
+        attributes_fn=_attributes_catalog_promotions,
     ),
 )
 
@@ -596,6 +772,72 @@ class NousCatalogSensor(
         return self.entity_description.attributes_fn(self._models, self._entry)
 
 
+class NousModelSensor(
+    CoordinatorEntity[DataUpdateCoordinator[list[dict[str, Any]]]],
+    NousBaseEntity,
+    SensorEntity,
+):
+    """A sensor of one model subentry, fed by the cost tracker and catalog."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        entry: NousConfigEntry,
+        subentry: ConfigSubentry,
+        description: NousModelSensorDescription,
+    ) -> None:
+        """Initialize the per model sensor."""
+        NousBaseEntity.__init__(self, entry, subentry)
+        self._entry = entry
+        self._model_id = _model_id_of(subentry)
+        self.entity_description = description
+        self._attr_translation_key = description.key
+        # Subentry entities get their own unique id namespace so two subentries
+        # serving different models never collide in the registry.
+        self._attr_unique_id = (
+            f"{entry.entry_id}_{subentry.subentry_id}_{description.key}"
+        )
+        self._unsub_dispatcher: Callable[[], None] | None = None
+        # CoordinatorEntity expects these before async_added_to_hass runs.
+        self.coordinator = entry.runtime_data.catalog
+        self.coordinator_context = None
+
+    @property
+    def native_value(self) -> Any:
+        """Return the current value of the sensor."""
+        return self.entity_description.value_fn(self._entry, self._model_id)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra attributes of the sensor."""
+        if self.entity_description.attributes_fn is None:
+            return None
+        return self.entity_description.attributes_fn(self._entry, self._model_id)
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to cost and catalog updates."""
+        await super().async_added_to_hass()
+        self._unsub_dispatcher = async_dispatcher_connect(
+            self.hass,
+            COST_UPDATE_SIGNAL.format(self._entry.entry_id),
+            self._handle_cost_update,
+        )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe from cost updates."""
+        if self._unsub_dispatcher is not None:
+            self._unsub_dispatcher()
+            self._unsub_dispatcher = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_cost_update(self) -> None:
+        """Write the state after a cost update."""
+        self.async_write_ha_state()
+
+
 @callback
 def _async_remove_stale_entities(hass: HomeAssistant, entry: NousConfigEntry) -> None:
     """Drop registry rows for sensors this version no longer provides.
@@ -609,8 +851,15 @@ def _async_remove_stale_entities(hass: HomeAssistant, entry: NousConfigEntry) ->
 
     registry = er.async_get(hass)
     prefix = f"{entry.entry_id}_"
+    # Per model sensors live under "<entry>_<subentry>_<key>"; they are removed
+    # together with their subentry, never as a stale account sensor.
+    subentry_prefixes = tuple(
+        f"{prefix}{subentry.subentry_id}_" for subentry in entry.subentries.values()
+    )
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if reg_entry.domain != "sensor" or not reg_entry.unique_id.startswith(prefix):
+            continue
+        if reg_entry.unique_id.startswith(subentry_prefixes):
             continue
         if reg_entry.unique_id.removeprefix(prefix) not in known:
             registry.async_remove(reg_entry.entity_id)
@@ -640,3 +889,15 @@ async def async_setup_entry(
     )
 
     async_add_entities(entities)
+
+    # One device per model subentry, with its own cost and pricing figures.
+    for subentry in entry.subentries.values():
+        if subentry.subentry_type != SUBENTRY_TYPE_MODEL:
+            continue
+        async_add_entities(
+            [
+                NousModelSensor(entry, subentry, description)
+                for description in MODEL_SENSOR_DESCRIPTIONS
+            ],
+            config_subentry_id=subentry.subentry_id,
+        )

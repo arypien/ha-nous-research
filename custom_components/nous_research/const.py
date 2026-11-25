@@ -18,6 +18,10 @@ CONF_BUDGET: Final = "budget_usd"
 CONF_COST_SENSORS: Final = "cost_sensors"
 CONF_CATALOG_INTERVAL: Final = "catalog_interval"
 
+# Config subentry types
+#: Extra model served by an entry as an additional AI Task entity.
+SUBENTRY_TYPE_MODEL: Final = "model"
+
 # Reasoning modes
 REASONING_NONE: Final = "none"
 REASONING_PROMPT: Final = "prompt"

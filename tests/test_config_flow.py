@@ -21,6 +21,7 @@ from custom_components.nous_research.api import (
     NousPaymentRequiredError,
     NousRateLimitError,
 )
+from custom_components.nous_research.config_flow import CONF_NAME
 from custom_components.nous_research.const import (
     CONF_BASE_URL,
     CONF_CATALOG_INTERVAL,
@@ -31,7 +32,9 @@ from custom_components.nous_research.const import (
     CONF_TEMPERATURE,
     DEFAULT_BASE_URL,
     DOMAIN,
+    SUBENTRY_TYPE_MODEL,
 )
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 #: Mirrors the aggregated, namespaced catalog the API really returns.
 CATALOG = [
@@ -41,6 +44,8 @@ CATALOG = [
 ]
 
 CHAT_MODEL = "vendor/model-a"
+OTHER_MODEL = "vendor/model-c"
+THIRD_MODEL = "vendor/model-d"
 
 
 class FakeClient:
@@ -111,42 +116,17 @@ async def test_form_shown(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
 
-async def test_model_step_follows_credentials(hass: HomeAssistant) -> None:
-    """Valid credentials lead to the catalog driven model step."""
+async def test_entry_is_an_api_account(hass: HomeAssistant) -> None:
+    """Valid credentials create the entry right away, with no model inside."""
     result = await _async_start(hass)
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "model"
-    selector = next(iter(result["data_schema"].schema.values()))
-    values = [option["value"] for option in selector.config["options"]]
-    assert CHAT_MODEL in values
-    # Batch endpoints are useless for chat and stay out of the list.
-    assert "vendor/model-b:batch" not in values
-
-
-async def test_default_model_skips_embeddings(hass: HomeAssistant) -> None:
-    """An empty answer falls back to the first chat capable model."""
-    started = await _async_start(hass)
-    result = await hass.config_entries.flow.async_configure(
-        started["flow_id"], {CONF_CHAT_MODEL: ""}
-    )
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_CHAT_MODEL] == CHAT_MODEL
-
-
-async def test_successful_setup(hass: HomeAssistant) -> None:
-    """A valid key and a picked model create the entry with defaults."""
-    started = await _async_start(hass)
-    result = await hass.config_entries.flow.async_configure(
-        started["flow_id"], {CONF_CHAT_MODEL: CHAT_MODEL}
-    )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_API_KEY] == "sk-test-123"
-    assert result["data"][CONF_CHAT_MODEL] == CHAT_MODEL
+    assert result["data"][CONF_BASE_URL] == DEFAULT_BASE_URL
+    assert CONF_CHAT_MODEL not in result["data"]
 
     options = result["options"]
+    assert CONF_CHAT_MODEL not in options
     assert options[CONF_PROMPT]
     assert options[CONF_MAX_TOKENS] > 0
     assert 0 <= options[CONF_TEMPERATURE] <= 2
@@ -156,6 +136,7 @@ async def test_successful_setup(hass: HomeAssistant) -> None:
 
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     assert entry.unique_id == cf._unique_id("sk-test-123")
+    assert not entry.subentries
 
 
 @pytest.mark.parametrize(
@@ -182,7 +163,7 @@ async def test_credentials_validation(
 
 
 async def test_empty_catalog_blocks_setup(hass: HomeAssistant) -> None:
-    """Without a catalog there is nothing to pick from."""
+    """A key the API does not accept for a catalog call is not stored."""
     FakeClient.models = []
     result = await _async_start(hass)
 
@@ -205,17 +186,12 @@ async def test_empty_catalog_blocks_setup(hass: HomeAssistant) -> None:
 async def test_api_errors_are_mapped(
     hass: HomeAssistant, exc: Exception, error: str
 ) -> None:
-    """API failures surface as translated form errors."""
-    started = await _async_start(hass)
-    assert started["step_id"] == "model"
-
+    """API failures surface as translated form errors on the credentials step."""
     FakeClient.error = exc
-    result = await hass.config_entries.flow.async_configure(
-        started["flow_id"], {CONF_CHAT_MODEL: CHAT_MODEL}
-    )
+    result = await _async_start(hass)
 
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "model"
+    assert result["step_id"] == "user"
     assert result["errors"] == {"base": error}
     assert not hass.config_entries.async_entries(DOMAIN)
 
@@ -223,9 +199,7 @@ async def test_api_errors_are_mapped(
 async def test_duplicate_key_aborts(hass: HomeAssistant) -> None:
     """The same API key cannot be added twice."""
     first = await _async_start(hass)
-    await hass.config_entries.flow.async_configure(
-        first["flow_id"], {CONF_CHAT_MODEL: CHAT_MODEL}
-    )
+    assert first["type"] is FlowResultType.CREATE_ENTRY
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -233,10 +207,164 @@ async def test_duplicate_key_aborts(hass: HomeAssistant) -> None:
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _credentials()
     )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_CHAT_MODEL: CHAT_MODEL}
-    )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+async def test_legacy_unique_id_aborts(hass: HomeAssistant) -> None:
+    """Entries created before 0.1.3 (bare key hash) still block the same key."""
+    MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        data={
+            CONF_API_KEY: "sk-test-123",
+            CONF_BASE_URL: DEFAULT_BASE_URL,
+            CONF_CHAT_MODEL: CHAT_MODEL,
+        },
+        title="Legacy",
+        unique_id=cf._unique_id("sk-test-123"),
+    ).add_to_hass(hass)
+
+    result = await _async_start(hass)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+def _mock_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Add an account entry with no model subentry yet."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_API_KEY: "sk-test-123",
+            CONF_BASE_URL: DEFAULT_BASE_URL,
+        },
+        options={},
+        title="Nous Research",
+        unique_id=cf._unique_id("sk-test-123"),
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def _async_start_subentry(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    *,
+    source: str = config_entries.SOURCE_USER,
+    subentry_id: str | None = None,
+) -> dict[str, Any]:
+    """Start the model subentry flow for an entry."""
+    context: dict[str, Any] = {"source": source}
+    if subentry_id is not None:
+        context["subentry_id"] = subentry_id
+    return await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_TYPE_MODEL), context=context
+    )
+
+
+async def test_subentry_offers_catalog_models(hass: HomeAssistant) -> None:
+    """The model step lists the chat capable models of the catalog."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    selector = next(iter(result["data_schema"].schema.values()))
+    values = [option["value"] for option in selector.config["options"]]
+    assert CHAT_MODEL in values
+    # Batch endpoints are useless for chat and stay out of the list.
+    assert "vendor/model-b:batch" not in values
+
+
+async def test_add_model_subentry(hass: HomeAssistant) -> None:
+    """The model subentry flow adds a model to an existing entry."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL, CONF_NAME: "Fast model"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert len(entry.subentries) == 1
+    subentry = next(iter(entry.subentries.values()))
+    assert subentry.subentry_type == SUBENTRY_TYPE_MODEL
+    assert subentry.data[CONF_CHAT_MODEL] == OTHER_MODEL
+    assert subentry.title == "Fast model"
+    assert subentry.unique_id == OTHER_MODEL
+    # The entry stays model free: the model lives in the subentry only.
+    assert CONF_CHAT_MODEL not in entry.data
+
+
+async def test_subentry_rejects_model_in_use(hass: HomeAssistant) -> None:
+    """A model can be added to an entry once."""
+    entry = _mock_entry(hass)
+    result = await _async_start_subentry(hass, entry)
+    await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL}
+    )
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_CHAT_MODEL: "model_in_use"}
+    assert len(hass.config_entries.async_get_entry(entry.entry_id).subentries) == 1
+
+
+async def test_subentry_accepts_custom_model(hass: HomeAssistant) -> None:
+    """A model id outside the catalog can still be pasted in."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: "vendor/not-in-catalog"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry = next(iter(entry.subentries.values()))
+    assert subentry.data[CONF_CHAT_MODEL] == "vendor/not-in-catalog"
+
+
+async def test_subentry_reconfigure(hass: HomeAssistant) -> None:
+    """Reconfigure changes the model, the title and the unique id."""
+    entry = _mock_entry(hass)
+    result = await _async_start_subentry(hass, entry)
+    await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL, CONF_NAME: "Fast model"}
+    )
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry_id = next(iter(entry.subentries))
+
+    result = await _async_start_subentry(
+        hass,
+        entry,
+        source=config_entries.SOURCE_RECONFIGURE,
+        subentry_id=subentry_id,
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: THIRD_MODEL, CONF_NAME: "Renamed"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    subentry = entry.subentries[subentry_id]
+    assert subentry.data[CONF_CHAT_MODEL] == THIRD_MODEL
+    assert subentry.title == "Renamed"
+    assert subentry.unique_id == THIRD_MODEL

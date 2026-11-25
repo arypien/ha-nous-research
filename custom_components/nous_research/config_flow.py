@@ -10,7 +10,15 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    ConfigSubentry,
+    ConfigSubentryFlow,
+    OptionsFlow,
+    SubentryFlowResult,
+)
 from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API, CONF_PROMPT
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
@@ -33,7 +41,7 @@ from .api import (
     NousPaymentRequiredError,
     NousRateLimitError,
 )
-from .catalog import is_chat_model, model_id, model_ids, pick_default_model
+from .catalog import is_chat_model, model_id, pick_default_model
 from .const import (
     CONF_BASE_URL,
     CONF_BUDGET,
@@ -45,7 +53,6 @@ from .const import (
     CONF_TEMPERATURE,
     DEFAULT_BASE_URL,
     DEFAULT_CATALOG_INTERVAL,
-    DEFAULT_CHAT_MODEL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_NAME,
     DEFAULT_REASONING_MODE,
@@ -53,6 +60,7 @@ from .const import (
     DEFAULT_TEMPERATURE,
     DOMAIN,
     REASONING_MODES,
+    SUBENTRY_TYPE_MODEL,
 )
 
 _LOGGER = logging.getLogger(__package__)
@@ -67,8 +75,43 @@ LLM_HASS_API_OPTIONS = [LLM_API_NONE, LLM_API_ASSIST, LLM_API_CONVERSATION]
 
 
 def _unique_id(api_key: str) -> str:
-    """Return a stable unique id for an API key."""
+    """Return the stable unique id of an API account.
+
+    The id is derived from the key alone: an entry is one account, and the
+    models it serves are subentries, so the same key can never be added twice.
+    """
     return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
+
+def _uses_key(entry: ConfigEntry, api_key: str) -> bool:
+    """Return True when the entry already stores this API key."""
+    return str(entry.data.get(CONF_API_KEY) or "") == api_key
+
+
+def _model_in_use(
+    entry: ConfigEntry, model: str, subentry_id: str | None = None
+) -> bool:
+    """Return True when a ``model`` subentry already serves this model.
+
+    A config entry carries no model of its own, so only the subentries are
+    compared; the subentry being reconfigured is ignored so saving it
+    unchanged stays possible.
+    """
+    return any(
+        subentry.subentry_id != subentry_id
+        and str(subentry.data.get(CONF_CHAT_MODEL) or "") == model
+        for subentry in entry.subentries.values()
+        if subentry.subentry_type == SUBENTRY_TYPE_MODEL
+    )
+
+
+def _async_model_conflict(
+    hass: HomeAssistant, entry: ConfigEntry, model: str
+) -> str | None:
+    """Return the error key when ``model`` is already served by this entry."""
+    if _model_in_use(entry, model):
+        return "model_in_use"
+    return None
 
 
 def _chat_model_options(
@@ -83,6 +126,41 @@ def _chat_model_options(
         name = str(model.get("name") or identifier)
         options.append({"value": identifier, "label": f"{name} ({identifier})"})
     return options
+
+
+def _chat_model_options_with(
+    catalog: Iterable[dict[str, Any]] | None, current: str
+) -> list[dict[str, str]]:
+    """Build dropdown entries, keeping ``current`` selectable when missing."""
+    options = _chat_model_options(catalog)
+    if current and current not in {option["value"] for option in options}:
+        options.insert(0, {"value": current, "label": current})
+    return options
+
+
+async def _async_fetch_catalog(
+    hass: HomeAssistant, api_key: str, base_url: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Return the model catalog and, on failure, the error key to show.
+
+    The catalog call doubles as credential check: it is the cheapest request
+    that proves the key works, so its failure reason is what the form reports.
+    """
+    client = NousClient(hass, api_key, base_url)
+    try:
+        return await client.async_list_models(), None
+    except NousAuthError:
+        return [], "invalid_auth"
+    except NousPaymentRequiredError:
+        return [], "no_credits"
+    except NousRateLimitError:
+        return [], "rate_limited"
+    except (NousApiError, NousConnectionError) as err:
+        _LOGGER.debug("Could not fetch the model catalog: %s", err)
+        return [], "cannot_connect"
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Unexpected error while fetching the model catalog")
+        return [], "unknown"
 
 
 async def _async_validate(
@@ -107,31 +185,26 @@ async def _async_validate(
 
 
 class NousConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Nous Research."""
+    """Handle a config flow for Nous Research.
 
-    VERSION = 1
+    Version 2 entries are API accounts: they store the key only. Models live in
+    ``model`` subentries, each one carrying its own agent, task entity and
+    per model sensors.
+    """
+
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the flow."""
         super().__init__()
-        self._catalog: list[dict[str, Any]] = []
         self._api_key = ""
         self._base_url = DEFAULT_BASE_URL
-        self._name = DEFAULT_NAME
 
     async def _async_fetch_models(
         self, api_key: str, base_url: str
-    ) -> list[dict[str, Any]]:
-        """Return the model catalog from the API, best effort."""
-        client = NousClient(self.hass, api_key, base_url)
-        try:
-            return await client.async_list_models()
-        except (NousApiError, NousConnectionError, NousAuthError) as err:
-            _LOGGER.debug("Could not fetch the model catalog: %s", err)
-            return []
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception("Unexpected error while fetching the model catalog")
-            return []
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Return the model catalog and the error key when the call fails."""
+        return await _async_fetch_catalog(self.hass, api_key, base_url)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -150,67 +223,42 @@ class NousConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors[CONF_BASE_URL] = "invalid_url"
 
             if not errors:
-                models = await self._async_fetch_models(api_key, base_url)
+                models, error = await self._async_fetch_models(api_key, base_url)
                 if models:
-                    self._catalog = models
-                    self._api_key = api_key
-                    self._base_url = base_url
-                    self._name = name
-                    return await self.async_step_model()
-                errors["base"] = "cannot_connect"
+                    await self.async_set_unique_id(_unique_id(api_key))
+                    self._abort_if_unique_id_configured()
+                    if any(
+                        _uses_key(other, api_key)
+                        for other in self._async_current_entries()
+                    ):
+                        return self.async_abort(reason="already_configured")
+                    return self.async_create_entry(
+                        title=name,
+                        data={
+                            CONF_API_KEY: api_key,
+                            CONF_BASE_URL: base_url,
+                        },
+                        options={
+                            CONF_PROMPT: DEFAULT_SYSTEM_PROMPT,
+                            CONF_LLM_HASS_API: LLM_API_ASSIST,
+                            CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
+                            CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
+                            CONF_REASONING_MODE: DEFAULT_REASONING_MODE,
+                            CONF_COST_SENSORS: True,
+                            CONF_CATALOG_INTERVAL: DEFAULT_CATALOG_INTERVAL,
+                        },
+                    )
+                errors["base"] = error or "cannot_connect"
 
         return self._async_show_user_form(user_input, errors)
 
-    async def async_step_model(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Pick the chat model out of the catalog reported by the API."""
-        errors: dict[str, str] = {}
-        default_model = pick_default_model(self._catalog)
-
-        if user_input is not None:
-            model = str(user_input.get(CONF_CHAT_MODEL) or "").strip() or default_model
-            if not model:
-                errors[CONF_CHAT_MODEL] = "model_required"
-            else:
-                errors = await _async_validate(
-                    self.hass, self._api_key, self._base_url, model
-                )
-
-            if not errors:
-                await self.async_set_unique_id(_unique_id(self._api_key))
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=self._name,
-                    data={
-                        CONF_API_KEY: self._api_key,
-                        CONF_BASE_URL: self._base_url,
-                        CONF_CHAT_MODEL: model,
-                    },
-                    options={
-                        CONF_PROMPT: DEFAULT_SYSTEM_PROMPT,
-                        CONF_LLM_HASS_API: LLM_API_ASSIST,
-                        CONF_MAX_TOKENS: DEFAULT_MAX_TOKENS,
-                        CONF_TEMPERATURE: DEFAULT_TEMPERATURE,
-                        CONF_REASONING_MODE: DEFAULT_REASONING_MODE,
-                        CONF_COST_SENSORS: True,
-                        CONF_CATALOG_INTERVAL: DEFAULT_CATALOG_INTERVAL,
-                    },
-                )
-
-        options = _chat_model_options(self._catalog)
-        if default_model and default_model not in {
-            option["value"] for option in options
-        }:
-            options.insert(0, {"value": default_model, "label": default_model})
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_CHAT_MODEL, default=default_model): SelectSelector(
-                    SelectSelectorConfig(options=options, custom_value=True)
-                ),
-            }
-        )
-        return self.async_show_form(step_id="model", data_schema=schema, errors=errors)
+    @classmethod
+    @callback
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
+        """Return the subentry types this integration supports."""
+        return {SUBENTRY_TYPE_MODEL: ModelSubentryFlow}
 
     def _async_show_user_form(
         self, user_input: dict[str, Any] | None, errors: dict[str, str]
@@ -246,26 +294,25 @@ class NousConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             api_key = str(user_input.get(CONF_API_KEY) or "").strip()
             base_url = entry.data.get(CONF_BASE_URL) or DEFAULT_BASE_URL
-            model = str(entry.data.get(CONF_CHAT_MODEL) or DEFAULT_CHAT_MODEL)
 
             if not api_key:
                 errors[CONF_API_KEY] = "invalid_auth"
+            elif any(
+                other.entry_id != entry.entry_id and _uses_key(other, api_key)
+                for other in self._async_current_entries()
+            ):
+                return self.async_abort(reason="already_configured")
             else:
-                digest = _unique_id(api_key)
-                for other in self._async_current_entries():
-                    if other.entry_id != entry.entry_id and other.unique_id == digest:
-                        return self.async_abort(reason="already_configured")
-                catalog = await self._async_fetch_models(api_key, base_url)
-                if catalog and model not in model_ids(catalog):
-                    # The catalog is the source of truth: a stale id would make
-                    # every request fail.
-                    model = pick_default_model(catalog)
-                errors = await _async_validate(self.hass, api_key, base_url, model)
+                models, error = await self._async_fetch_models(api_key, base_url)
+                if not models:
+                    # A rejected key must not be stored: the catalog call is the
+                    # cheapest proof the credentials still work.
+                    errors["base"] = error or "cannot_connect"
 
             if not errors:
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    data={**entry.data, CONF_API_KEY: api_key, CONF_CHAT_MODEL: model},
+                    data={**entry.data, CONF_API_KEY: api_key},
                 )
                 return self.async_abort(reason="reauth_successful")
 
@@ -298,6 +345,7 @@ class NousOptionsFlow(OptionsFlow):
         """Manage the integration options."""
         entry = self.config_entry
         options = entry.options
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             llm_api = user_input.get(CONF_LLM_HASS_API, LLM_API_NONE)
@@ -310,9 +358,6 @@ class NousOptionsFlow(OptionsFlow):
                     CONF_LLM_HASS_API: None
                     if llm_api == LLM_API_NONE
                     else llm_api,
-                    CONF_CHAT_MODEL: user_input.get(CONF_CHAT_MODEL)
-                    or entry.data.get(CONF_CHAT_MODEL)
-                    or DEFAULT_CHAT_MODEL,
                     CONF_MAX_TOKENS: int(
                         user_input.get(CONF_MAX_TOKENS) or DEFAULT_MAX_TOKENS
                     ),
@@ -323,7 +368,9 @@ class NousOptionsFlow(OptionsFlow):
                     ),
                     CONF_REASONING_MODE: user_input.get(CONF_REASONING_MODE)
                     or DEFAULT_REASONING_MODE,
-                    CONF_COST_SENSORS: bool(user_input.get(CONF_COST_SENSORS, True)),
+                    CONF_COST_SENSORS: bool(
+                        user_input.get(CONF_COST_SENSORS, True)
+                    ),
                     CONF_BUDGET: None
                     if budget in (None, "")
                     else float(str(budget)),
@@ -337,18 +384,6 @@ class NousOptionsFlow(OptionsFlow):
         current_llm_api = options.get(CONF_LLM_HASS_API) or LLM_API_NONE
         if current_llm_api not in LLM_HASS_API_OPTIONS:
             current_llm_api = LLM_API_ASSIST
-        runtime = getattr(entry, "runtime_data", None)
-        coordinator = getattr(runtime, "catalog", None)
-        model_options = _chat_model_options(getattr(coordinator, "data", None))
-        current_model = (
-            options.get(CONF_CHAT_MODEL)
-            or entry.data.get(CONF_CHAT_MODEL)
-            or DEFAULT_CHAT_MODEL
-        )
-        if current_model and current_model not in {
-            option["value"] for option in model_options
-        }:
-            model_options.insert(0, {"value": current_model, "label": current_model})
         current_reasoning = options.get(CONF_REASONING_MODE) or DEFAULT_REASONING_MODE
         if current_reasoning not in REASONING_MODES:
             current_reasoning = DEFAULT_REASONING_MODE
@@ -366,11 +401,6 @@ class NousOptionsFlow(OptionsFlow):
                     SelectSelectorConfig(
                         options=LLM_HASS_API_OPTIONS, custom_value=False
                     )
-                ),
-                vol.Required(
-                    CONF_CHAT_MODEL, default=current_model
-                ): SelectSelector(
-                    SelectSelectorConfig(options=model_options, custom_value=True)
                 ),
                 vol.Required(
                     CONF_MAX_TOKENS,
@@ -426,4 +456,109 @@ class NousOptionsFlow(OptionsFlow):
                 ),
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+
+
+class ModelSubentryFlow(ConfigSubentryFlow):
+    """Add or reconfigure an extra model served by one config entry.
+
+    Every subentry becomes its own conversation agent (a ``conversation.*``
+    entity, selectable in Assist and in pipelines by entity id) and its own AI
+    Task entity. Key, prompt, tools and cost sensors are shared with the entry.
+    """
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Add another model to an existing entry."""
+        return await self._async_model_step(user_input, subentry=None)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Change the model or the title of an existing subentry."""
+        return await self._async_model_step(
+            user_input, subentry=self._get_reconfigure_subentry()
+        )
+
+    async def _async_model_step(
+        self, user_input: dict[str, Any] | None, subentry: ConfigSubentry | None
+    ) -> SubentryFlowResult:
+        """Show the model form and store the selection."""
+        entry = self._get_entry()
+        catalog = await self._async_catalog(entry)
+        current = str(subentry.data.get(CONF_CHAT_MODEL) or "") if subentry else ""
+        default_model = current or pick_default_model(catalog)
+        default_title = subentry.title if subentry else ""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            model = str(user_input.get(CONF_CHAT_MODEL) or "").strip() or default_model
+            title = (
+                str(user_input.get(CONF_NAME) or "").strip()
+                or default_title
+                or model
+            )
+
+            if not model:
+                errors[CONF_CHAT_MODEL] = "model_required"
+            elif _model_in_use(
+                entry,
+                model,
+                subentry.subentry_id if subentry is not None else None,
+            ):
+                errors[CONF_CHAT_MODEL] = "model_in_use"
+            else:
+                # Reuse the entry credentials: a subentry never stores its own key.
+                errors = await _async_validate(
+                    self.hass,
+                    str(entry.data.get(CONF_API_KEY) or ""),
+                    entry.data.get(CONF_BASE_URL) or DEFAULT_BASE_URL,
+                    model,
+                )
+
+            if not errors:
+                data = {CONF_CHAT_MODEL: model}
+                if subentry is None:
+                    return self.async_create_entry(
+                        title=title, data=data, unique_id=model
+                    )
+                # async_update_reload_and_abort refuses entries with update
+                # listeners; the entry update listener triggers the reload that
+                # recreates the AI Task entities.
+                return self.async_update_and_abort(
+                    entry, subentry, title=title, data=data, unique_id=model
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure" if subentry is not None else "user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_CHAT_MODEL, default=default_model
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=_chat_model_options_with(catalog, default_model),
+                            custom_value=True,
+                        )
+                    ),
+                    vol.Optional(CONF_NAME, default=default_title): TextSelector(),
+                }
+            ),
+            errors=errors,
+            description_placeholders={"name": entry.title},
+        )
+
+    async def _async_catalog(self, entry: ConfigEntry) -> list[dict[str, Any]]:
+        """Return the model catalog, preferring the loaded entry coordinator."""
+        runtime = getattr(entry, "runtime_data", None)
+        coordinator = getattr(runtime, "catalog", None)
+        models = list(getattr(coordinator, "data", None) or [])
+        if models:
+            return models
+        catalog, _ = await _async_fetch_catalog(
+            self.hass,
+            str(entry.data.get(CONF_API_KEY) or ""),
+            entry.data.get(CONF_BASE_URL) or DEFAULT_BASE_URL,
+        )
+        return catalog

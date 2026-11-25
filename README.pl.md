@@ -9,7 +9,7 @@
   <a href="https://github.com/hacs/integration"><img alt="Repozytorium własne HACS" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
   <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
   <a href="LICENSE"><img alt="Licencja MIT" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
-  <img alt="Testy" src="https://img.shields.io/badge/testy-68%20passing-3DA639.svg?style=flat-square">
+  <img alt="Testy" src="https://img.shields.io/badge/testy-78%20passing-3DA639.svg?style=flat-square">
   <img alt="Tłumaczenia" src="https://img.shields.io/badge/i18n-EN%20%7C%20PL-8A63D2.svg?style=flat-square">
 </p>
 
@@ -33,8 +33,10 @@ liczy się na Twojej instancji.
   otwierającego tagu `think`.
 - **Śledzenie kosztów** — dziś / 7 dni / 30 dni / suma, liczniki tokenów i zapytań,
   opcjonalny budżet miesięczny, wszystko przechowywane lokalnie.
+- **Osobne sensory per model** — każdy podwpis modelu ma własne liczniki kosztu,
+  tokenów, zapytań i ceny, startujące od zera.
 - **Żywy katalog modeli** — ceny, długość kontekstu i modalności prosto z
-  `/v1/models`; wybrany model czatu jest weryfikowany względem katalogu.
+  `/v1/models`; każdy model jest weryfikowany względem katalogu.
 - **Statystyki długoterminowe** — sensory kosztów wysyłają statystyki `total`,
   więc historia przeżywa czyszczenie recorder-a i działa w kartach Statistics Graph.
 - **Interfejs dwujęzyczny** — angielski i polski, plus
@@ -57,34 +59,40 @@ Skopiuj `custom_components/nous_research` z archiwum wydania do
 Wymaga **Home Assistant 2026.9.0 lub nowszego** oraz klucza API z
 <https://portal.nousresearch.com>.
 
+> **Aktualizacja z 0.1.2:** wpis staje się kontem API, więc zapisany model znika
+> (historia kosztów zostaje), a jego agent Assist i encja AI Task przestają
+> istnieć. Wejdź we wpis, naciśnij **Dodaj model** i wskaż model ponownie — nic
+> więcej nie trzeba konfigurować.
+
 ## Konfiguracja
 
 1. Utwórz klucz API w portalu Nous.
 2. **Ustawienia → Urządzenia i usługi → Dodaj integrację → Nous Research**.
-3. Wklej klucz — katalog jest pobierany i weryfikowany zapytaniem na jeden token,
-   więc unieważniony klucz zawodzi od razu, a nie przy pierwszym użyciu.
-4. Wybierz model czatu z listy zwracanej przez API (wyszukiwana lista, dowolny
-   tekst też jest akceptowany).
+3. Wklej klucz — katalog jest pobierany od razu, więc unieważniony klucz zawodzi
+   natychmiast, a nie przy pierwszym użyciu.
+4. Na nowym wpisie naciśnij **Dodaj model** i wybierz model czatu z listy
+   zwracanej przez API (wyszukiwana lista, dowolny tekst też jest akceptowany).
+   Powtórz dla kolejnych modeli.
 
 | Pole | Znaczenie |
 | --- | --- |
 | Klucz API | Token Bearer z portalu, trzymany we wpisie konfiguracji |
 | Adres bazowy | Domyślnie `https://inference-api.nousresearch.com/v1` |
 | Nazwa | Nazwa wpisu, jednocześnie prefiks tworzonych encji |
-| Model | Wybierany w drugim kroku z żywego katalogu `/models` |
+| Model | Wybierany per podwpis (po utworzeniu wpisu) z żywego katalogu `/models` |
 
 Żaden identyfikator modelu nie jest zaszyty na stałe: katalog jest agregowany i
-namespace'owany (`vendor/model`, ~300 modeli czatu), więc lista i jej domyślna
-wartość pochodzą z API. Endpointy batch (`:batch`), embeddings, TTS i modele
-tylko-obrazkowe są odfiltrowane. Jeśli zapisany model zniknie z katalogu,
-integracja wraca do domyślnego z katalogu i zgłasza repair issue z prośbą o wybór
-modelu — zamiast wysypywać każde zapytanie.
+namespace'owany (`vendor/model`, ~300 modeli czatu), więc lista pochodzi z API.
+Endpointy batch (`:batch`), embeddings, TTS i modele tylko-obrazkowe są
+odfiltrowane. Jeśli model podwpisu zniknie z katalogu, ten podwpis zgłasza repair
+issue z prośbą o wybór innego modelu — zamiast wysypywać każde zapytanie.
 
 ### Opcje
 
-**Konfiguruj** na wpisie obejmuje prompt systemowy, wystawione API HA, model,
+**Konfiguruj** na wpisie obejmuje prompt systemowy, wystawione API HA,
 `max_tokens`, `temperature`, tryb rozumowania, sensory kosztów, budżet oraz
-interwał odświeżania katalogu.
+interwał odświeżania katalogu. Model nie jest opcją wpisu — siedzi w podwpisach
+modeli.
 
 ## Tryby rozumowania
 
@@ -121,7 +129,7 @@ oknie Assist. Agent wykonuje do sześciu rund narzędziowych przed odpowiedzią.
 action: ai_task.generate_data
 data:
   task_name: Podsumowanie wieczoru
-  entity_id: ai_task.nous_research
+  entity_id: ai_task.nous_research_hermes_4_405b  # po jednej na podwpis modelu
   instructions: >-
     Podsumuj stan domu w trzech krótkich punktach. Wspomnij o otwartych oknach
     i światłach, które wciąż się świecą.
@@ -135,6 +143,22 @@ data:
 
 Strukturalny wynik wraca w `data`, gotowy do automatyzacji.
 
+## Wiele modeli
+
+Wpis integracji to jedno konto API: trzyma klucz, prompt, narzędzia i sensory
+zbiorcze, a po dodaniu zaczyna się pusty (zero agentów, zero liczników). Modele
+dodajesz do niego:
+
+- Wejdź we wpis integracji i wybierz **Dodaj model**. Każdy podwpis typu `model`
+  dostaje własnego agenta Assist (encja `conversation.*`, wybieralna w Assist
+  i w pipeline'ach po entity_id), własną encję AI Task oraz własne urządzenie
+  z sensorami kosztu, tokenów, zapytań i cen. Modeli możesz dodać dowolnie wiele
+  — klucz można wykorzystać raz, więc dwa w pełni niezależne zestawy wymagają
+  dwóch kluczy.
+- Podwpisy dzielą tylko to, co należy do konta: klucz API, prompt, wystawione
+  narzędzia i sensory zbiorcze. Wydatki każdego modelu trafiają dodatkowo na jego
+  własne sensory, więc dwa modele można porównać na jednym wykresie.
+
 ## Sensory
 
 | Encja | Stan |
@@ -147,8 +171,16 @@ Strukturalny wynik wraca w `data`, gotowy do automatyzacji.
 | `sensor.nous_research_top_model_today` | Najczęściej używany model dziś |
 | `sensor.nous_research_last_request` | Model, tokeny i koszt ostatniego zapytania |
 | `sensor.nous_research_available_models` | Liczba modeli w katalogu |
-| `sensor.nous_research_selected_model_input_price` | Cena promptu za 1M tokenów |
-| `sensor.nous_research_selected_model_output_price` | Cena odpowiedzi za 1M tokenów |
+
+Każdy podwpis modelu dodaje własne urządzenie z tymi sensorami (identyfikatory
+wyglądają jak `sensor.nous_research_<model>_…`):
+
+| Encja | Stan |
+| --- | --- |
+| `…_model_cost_total` / `…_model_cost_today` | Wydatki tego modelu w USD |
+| `…_model_input_tokens` / `…_model_output_tokens` | Tokeny promptu / odpowiedzi tego modelu |
+| `…_model_requests` | Zapytania wykonane tym modelem |
+| `…_input_price_per_1m_tokens` / `…_output_price_per_1m_tokens` | Ceny z katalogu za 1M tokenów |
 
 Identyfikatory encji biorą się z nazwy wpisu, więc inna **Nazwa** w konfiguracji daje
 inny prefiks. Sensor `sensor.nous_research_budget_remaining` powstaje dopiero po
@@ -228,7 +260,7 @@ lokalnie — nic nie jest wysyłane gdziekolwiek indziej. Diagnostyka redaguje k
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements_test.txt
-pytest -q                                      # 68 testów, offline
+pytest -q                                      # 78 testów, offline
 python tools/check_translations.py --strict    # zgodność kluczy en/pl
 ```
 

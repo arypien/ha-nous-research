@@ -10,10 +10,12 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.json import json_loads
 
-from .const import DOMAIN
+from .const import DOMAIN, SUBENTRY_TYPE_MODEL
 from .entity import NousBaseEntity
 
 if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigSubentry
+
     from . import NousConfigEntry
 
 # Language hints that may follow the opening markdown fence.
@@ -52,12 +54,14 @@ class NousAITaskEntity(ai_task.AITaskEntity, NousBaseEntity):
     _attr_should_poll = False
     _attr_supported_features = ai_task.AITaskEntityFeature.GENERATE_DATA
 
-    def __init__(self, entry: NousConfigEntry) -> None:
+    def __init__(self, entry: NousConfigEntry, subentry: ConfigSubentry) -> None:
         """Initialize the AI Task entity."""
-        # MRO resolves to NousBaseEntity.__init__(entry): AITaskEntity and
-        # RestoreEntity do not define their own constructor.
-        super().__init__(entry)
-        self._attr_unique_id = f"{entry.entry_id}_ai_task"
+        # MRO resolves to NousBaseEntity.__init__(entry, subentry): AITaskEntity
+        # and RestoreEntity do not define their own constructor.
+        super().__init__(entry, subentry)
+        self._attr_unique_id = f"{subentry.subentry_id}_ai_task"
+        # _attr_name stays None: the device is named after the subentry, so the
+        # entity inherits "Nous Research <model>" without repeating the title.
 
     async def _async_generate_data(
         self, task: ai_task.GenDataTask, chat_log: conversation.ChatLog
@@ -101,5 +105,16 @@ async def async_setup_entry(
     entry: NousConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the Nous Research AI Task entity from a config entry."""
-    async_add_entities([NousAITaskEntity(entry)])
+    """Set up one AI Task entity per ``model`` subentry.
+
+    A config entry is an API account with no model of its own; every model
+    added as a subentry gets an AI Task entity. conversation.py exposes the
+    same set as Assist agents.
+    """
+    for subentry in entry.subentries.values():
+        if subentry.subentry_type != SUBENTRY_TYPE_MODEL:
+            continue
+        async_add_entities(
+            [NousAITaskEntity(entry, subentry)],
+            config_subentry_id=subentry.subentry_id,
+        )

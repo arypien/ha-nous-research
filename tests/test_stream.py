@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from homeassistant.core import HomeAssistant
@@ -34,3 +36,5 @@ async def test_stream_deltas(hass: HomeAssistant, aioclient_mock, client: NousCl
     assert text == "Hello"
     assert thinking == "hmm"
     assert events[-1]["type"] == "usage"
+    # The gateway refuses a streamed call without the user tag as well.
+    assert aioclient_mock.mock_calls[0][2]["tags"] == ["user=home-assistant"]

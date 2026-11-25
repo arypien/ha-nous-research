@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.6
+
+**Every request now carries the `tags` the gateway demands.**
+
+- **`400 … missing tags` fixed.** The Nous gateway wants a top-level `tags` array with a
+  `user=` tag on *every* `/chat/completions` call; without it the request is refused
+  before a single token is generated. That is the real reason
+  `upstage/solar-mini4:free` and `stepfun/step-3.7-flash:free` failed while paid models
+  and `tencent/hy4-flash:free` worked. Streamed and non-streamed calls now send
+  `"tags": ["user=home-assistant"]` (`API_TAGS` in `const.py`), and the 1-token probe
+  sends it too — so free models validate on the first attempt.
+- 0.1.5's *add anyway* step stays as the fallback for a model the API genuinely refuses,
+  quoting the gateway's own message instead of a generic connection error.
+
 ## 0.1.5
 
 **Free models can be added again, and a refused model no longer hides its reason.**

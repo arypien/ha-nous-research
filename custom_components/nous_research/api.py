@@ -14,7 +14,7 @@ import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DEFAULT_BASE_URL
+from .const import API_TAGS, DEFAULT_BASE_URL
 
 _LOGGER = logging.getLogger(__package__)
 
@@ -222,6 +222,9 @@ class NousClient:
             "model": model,
             "messages": list(messages),
             "stream": stream,
+            # Mandatory for this gateway: a request without tags is rejected with
+            # "400 … missing tags" before a single token is generated.
+            "tags": list(API_TAGS),
         }
         if max_tokens:
             payload["max_tokens"] = int(max_tokens)

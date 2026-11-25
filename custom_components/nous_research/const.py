@@ -30,6 +30,11 @@ REASONING_MODES: Final = [REASONING_NONE, REASONING_PROMPT, REASONING_PREFILL]
 
 # Defaults
 DEFAULT_BASE_URL: Final = "https://inference-api.nousresearch.com/v1"
+
+#: The inference gateway wants a ``user=`` tag on every /chat/completions call.
+#: Without it the request is refused with ``400 … Additional info: missing tags``,
+#: which is what free (synthesized) variants hit on the very first probe.
+API_TAGS: Final = ["user=home-assistant"]
 #: No model id is hardcoded: the catalog is aggregated and namespaced
 #: (``vendor/model``), so the value is resolved from the live catalog.
 DEFAULT_CHAT_MODEL: Final = ""

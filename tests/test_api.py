@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 
+import json
+
 import pytest
 
 from homeassistant.core import HomeAssistant
@@ -104,3 +106,23 @@ async def test_chat_completion(hass: HomeAssistant, aioclient_mock, client: Nous
     assert result.usage is not None and result.usage.cached_tokens == 4
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].parsed_arguments() == {"name": "kitchen"}
+
+
+async def test_chat_request_carries_the_gateway_tags(
+    hass: HomeAssistant, aioclient_mock, client: NousClient
+) -> None:
+    """Without a ``user=`` tag the gateway answers 400 "missing tags" and no tokens."""
+    aioclient_mock.post(
+        CHAT_URL,
+        json={"model": "upstage/solar-mini4:free", "choices": [{"message": {"content": "p"}}]},
+    )
+
+    await client.async_chat(
+        "upstage/solar-mini4:free", [{"role": "user", "content": "hi"}], max_tokens=1
+    )
+
+    body = aioclient_mock.mock_calls[0][2]
+    assert isinstance(body, dict)
+    assert body["tags"] == ["user=home-assistant"]
+    assert body["model"] == "upstage/solar-mini4:free"
+    assert body["max_tokens"] == 1

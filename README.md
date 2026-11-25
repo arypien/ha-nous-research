@@ -71,7 +71,11 @@ Requires **Home Assistant 2026.9.0 or newer** and an API key from
 3. Paste the key — the catalog is fetched right away, so a revoked key fails
    immediately instead of at first use.
 4. On the new entry press **Add model** and pick a chat model from the list the
-   API reports (searchable dropdown, free text allowed). Repeat for more models.
+   API reports (searchable dropdown, free text allowed). Every option carries its
+   price — `FREE` or `$in/$out per 1M` — and the field starts on a placeholder, so
+   nothing is installed until you choose. If the API refuses the one-token test for
+   a model (gated free tiers do), the form quotes the API's message and lets you
+   store the model anyway. Repeat for more models.
 
 | Field | Meaning |
 | --- | --- |
@@ -79,13 +83,14 @@ Requires **Home Assistant 2026.9.0 or newer** and an API key from
 | Base URL | Defaults to `https://inference-api.nousresearch.com/v1` |
 | Name | Entry name, also the prefix of the created entities |
 | Model | Picked per subentry (after the entry exists), from the live `/models` catalog |
-| Model | Chosen in the second step from the live `/models` catalog |
 
 No model id is hardcoded: the catalog is aggregated and namespaced
 (`vendor/model`, ~300 chat models), so the list comes from the API. Batch endpoints
-(`:batch`), embeddings, TTS and image-only models are filtered out. If a stored model id disappears from the catalog, the integration falls back to
-the catalog default and raises a repair issue asking you to pick a model again —
-instead of failing every request.
+(`:batch`), embeddings, TTS and image-only models are filtered out. Nothing is
+preselected and nothing is guessed: the model step refuses an id the endpoint does
+not list (`invalid_model`), and a subentry whose model later disappears from the
+catalog raises a repair issue and fails its requests with that message — it is never
+quietly answered by some other model.
 
 ### Options
 

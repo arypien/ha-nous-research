@@ -5,9 +5,8 @@ from __future__ import annotations
 from custom_components.nous_research.catalog import (
     chat_model_ids,
     is_chat_model,
+    known_model,
     model_ids,
-    pick_default_model,
-    resolve_model,
 )
 
 CATALOG = [
@@ -44,24 +43,24 @@ def test_chat_model_ids_keep_catalog_order() -> None:
     assert chat_model_ids(CATALOG) == ["vendor/model-a"]
 
 
-def test_pick_default_model_prefers_first_chat_model() -> None:
-    """The default is the first chat model, not just the first id."""
-    assert pick_default_model(CATALOG) == "vendor/model-a"
-    assert pick_default_model(None) == ""
-    assert pick_default_model([{"id": "vendor/model-b:batch"}]) == "vendor/model-b:batch"
+def test_known_model_requires_an_exact_id() -> None:
+    """Only a byte exact catalog id counts as known: no aliases, no trimming."""
+    assert known_model("vendor/model-a", CATALOG) is True
+    assert known_model("vendor/model-b:batch", CATALOG) is True
+    assert known_model("Vendor/Model-A", CATALOG) is False
+    assert known_model("vendor/model-a ", CATALOG) is False
+    assert known_model("", CATALOG) is False
+    assert known_model("vendor/model-a", None) is False
 
 
-def test_resolve_model_keeps_known_ids() -> None:
-    """A model listed in the catalog is used as configured."""
-    assert resolve_model("vendor/model-a", CATALOG) == "vendor/model-a"
-
-
-def test_resolve_model_falls_back_for_stale_ids() -> None:
-    """A stale id falls back to the catalog default instead of failing."""
-    assert resolve_model("Hermes-4.3-36B", CATALOG) == "vendor/model-a"
-
-
-def test_resolve_model_without_catalog() -> None:
-    """Without a catalog the configured value is kept verbatim."""
-    assert resolve_model("Hermes-4.3-36B", None) == "Hermes-4.3-36B"
-    assert resolve_model("", None) == ""
+def test_free_variant_is_its_own_id() -> None:
+    """A ``:free`` id is a catalog entry of its own, never folded into its base."""
+    catalog = [
+        {"id": "upstage/solar-mini-4-5", "pricing": {"prompt": "0.00000001"}},
+        {"id": "upstage/solar-mini4:free", "pricing": {"prompt": "0"}},
+    ]
+    assert known_model("upstage/solar-mini4:free", catalog) is True
+    assert chat_model_ids(catalog) == [
+        "upstage/solar-mini-4-5",
+        "upstage/solar-mini4:free",
+    ]

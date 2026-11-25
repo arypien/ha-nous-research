@@ -6,9 +6,10 @@
     "error": {
       "cannot_connect": "Brak połączenia z API Nous Research.",
       "invalid_auth": "Nieprawidłowy klucz API.",
+      "invalid_model": "Ten model nie występuje w katalogu tego adresu API.",
       "invalid_url": "Nieprawidłowy adres API.",
       "model_in_use": "Ten model jest już używany przez ten wpis lub jeden z jego podwpisów.",
-      "model_required": "Wybierz model z listy lub wklej identyfikator modelu.",
+      "model_required": "Wybierz model z listy.",
       "no_credits": "Konto nie ma już środków.",
       "rate_limited": "Osiągnięto limit zapytań. Spróbuj ponownie za chwilę.",
       "unknown": "Nieoczekiwany błąd."
@@ -40,14 +41,16 @@
   "config_subentries": {
     "model": {
       "abort": {
+        "cannot_connect": "Brak połączenia z API Nous Research, więc lista modeli jest niedostępna. Spróbuj ponownie za chwilę.",
         "reconfigure_successful": "Model został zaktualizowany."
       },
       "entry_type": "Model",
       "error": {
         "cannot_connect": "Brak połączenia z API Nous Research.",
         "invalid_auth": "Nieprawidłowy klucz API.",
+        "invalid_model": "Ten model nie występuje w katalogu tego adresu API.",
         "model_in_use": "Ten model ma już podwpis w tym wpisie.",
-        "model_required": "Wybierz model z listy lub wklej identyfikator modelu.",
+        "model_required": "Wybierz model z listy.",
         "no_credits": "Konto nie ma już środków.",
         "rate_limited": "Osiągnięto limit zapytań. Spróbuj ponownie za chwilę.",
         "unknown": "Nieoczekiwany błąd."
@@ -57,16 +60,26 @@
         "user": "Dodaj model"
       },
       "step": {
+        "confirm": {
+          "data": {
+            "add_anyway": "Dodaj model mimo to"
+          },
+          "data_description": {
+            "add_anyway": "Zostaw wyłączone, aby wrócić i wybrać inny model."
+          },
+          "description": "API Nous Research odpowiedziało błędem na testowe zapytanie ({model}): {error}\n\nDodać mimo to? Jeśli model naprawdę jest niedostępny, encja zgłosi błąd przy pierwszej rozmowie. Klucz konta pozostaje ważny.",
+          "title": "Dodać model mimo to?"
+        },
         "reconfigure": {
           "data": {
             "chat_model": "Model",
             "name": "Nazwa"
           },
           "data_description": {
-            "chat_model": "Identyfikator modelu z katalogu endpointu tego wpisu lub dowolny własny identyfikator.",
+            "chat_model": "Model czatu z katalogu tego adresu API.",
             "name": "Nazwa tworzonego agenta Assist i encji AI Task. Domyślnie identyfikator modelu."
           },
-          "description": "Zmień model lub nazwę agenta Assist i encji AI Task dla tego modelu wpisu {name}.",
+          "description": "Zmień model lub nazwę agenta Assist i encji AI Task dla tego modelu wpisu {name}.\n\nWersja integracji: {version}.",
           "title": "Zmień model"
         },
         "user": {
@@ -75,10 +88,10 @@
             "name": "Nazwa"
           },
           "data_description": {
-            "chat_model": "Identyfikator modelu z katalogu endpointu tego wpisu lub dowolny własny identyfikator.",
+            "chat_model": "Model czatu z katalogu tego adresu API.",
             "name": "Nazwa tworzonego agenta Assist i encji AI Task. Domyślnie identyfikator modelu."
           },
-          "description": "Dodaj model do {name}. Otrzymuje własnego agenta Assist (encję conversation.* do wyboru w Assist i w pipeline'ach), własną encję AI Task oraz własne sensory kosztu, tokenów i cen. Wspólne z wpisem pozostają tylko klucz API, prompt i narzędzia.",
+          "description": "Dodaj model do {name}. Otrzymuje własnego agenta Assist (encję conversation.* do wyboru w Assist i w pipeline'ach), własną encję AI Task oraz własne sensory kosztu, tokenów i cen. Wspólne z wpisem pozostają tylko klucz API, prompt i narzędzia.\n\nWersja integracji: {version}.",
           "title": "Dodaj model"
         }
       }

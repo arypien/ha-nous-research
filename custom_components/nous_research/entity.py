@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 import json
+import logging
 from typing import TYPE_CHECKING, Any, Final
 
 import probatio
@@ -20,7 +21,7 @@ from .api import (
     NousPaymentRequiredError,
     NousRateLimitError,
 )
-from .catalog import resolve_model
+from .catalog import known_model
 from .const import (
     CONF_CHAT_MODEL,
     CONF_MAX_TOKENS,
@@ -42,6 +43,8 @@ if TYPE_CHECKING:
     from . import NousConfigEntry
 
 MANUFACTURER = "Nous Research"
+
+_LOGGER = logging.getLogger(__name__)
 
 # Device names are free text; keep them short enough for the registry UI.
 _DEVICE_NAME_MAX: Final = 120
@@ -262,7 +265,9 @@ class NousBaseEntity(Entity):
         configured = str(self._settings.get(CONF_CHAT_MODEL) or "").strip()
         if not configured:
             return "API account"
-        return resolve_model(configured, self._catalog)
+        # The device must show what is actually configured: resolving it against
+        # the catalog would relabel the entity as some other model.
+        return configured
 
     @property
     def _catalog(self) -> list[dict[str, Any]]:
@@ -284,7 +289,14 @@ class NousBaseEntity(Entity):
             raise HomeAssistantError(
                 "No model is configured for this entity; add a model subentry."
             )
-        return resolve_model(configured, self._catalog)
+        if not known_model(configured, self._catalog) and self._catalog:
+            # An id missing from the catalog used to be swapped for another model,
+            # so a typo was billed and answered by a model nobody picked.
+            raise HomeAssistantError(
+                f"Model '{configured}' is not in the API catalog. Pick a model for "
+                "this subentry again — the request was not sent."
+            )
+        return configured
 
     def _build_messages(
         self,
@@ -393,7 +405,17 @@ class NousBaseEntity(Entity):
 
                 usage = event.get("usage")
                 if usage is not None:
-                    await self.tracker.async_record(event.get("model") or model, usage)
+                    # Counters follow the model configured on the subentry, so a
+                    # provider-side alias cannot make the sensors look like they
+                    # switched to a different (possibly paid) model.
+                    served = str(event.get("model") or "")
+                    if served and served != model:
+                        _LOGGER.debug(
+                            "Nous served model %s for the requested model %s",
+                            served,
+                            model,
+                        )
+                    await self.tracker.async_record(model, usage)
 
     async def _async_handle_chat_log(
         self,

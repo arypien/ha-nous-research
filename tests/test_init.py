@@ -12,6 +12,7 @@ from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntryState, ConfigSubentry
 from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API, CONF_PROMPT
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
@@ -216,6 +217,68 @@ async def test_model_price_sensors(
     assert (
         _state_id(hass, entry, f"{entry.entry_id}_selected_model_input_price") is None
     )
+
+
+def _agent(hass: HomeAssistant, entry: MockConfigEntry) -> NousConversationEntity:
+    """Return the Assist agent of the single model subentry of ``entry``."""
+    subentry_id = next(iter(entry.subentries))
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "conversation", DOMAIN, f"{subentry_id}_conversation"
+    )
+    assert entity_id is not None
+    agent = conversation.async_get_agent(hass, entity_id)
+    assert isinstance(agent, NousConversationEntity)
+    return agent
+
+
+async def test_usage_is_booked_under_the_configured_model(
+    hass: HomeAssistant, setup_integration: MockConfigEntry
+) -> None:
+    """A model echoed by the API does not relabel the counters or the price."""
+    agent = _agent(hass, setup_integration)
+
+    async def stream() -> Any:
+        yield {"type": "delta", "text": "hi"}
+        yield {
+            "type": "usage",
+            "model": "vendor/served-by-someone-else",
+            "usage": {"prompt_tokens": 1000, "completion_tokens": 1000},
+        }
+
+    async for _ in agent._transform(stream()):
+        pass
+
+    last = agent.tracker.last_request
+    assert last is not None
+    assert last["model"] == MODEL_ID
+    # Priced with the configured model, so the free/paid split stays truthful.
+    assert agent.tracker.cost_today > 0
+    assert agent.tracker.unknown_models == []
+
+
+async def test_unknown_model_fails_loudly(hass: HomeAssistant) -> None:
+    """A model missing from the catalog is reported, never swapped for another."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    subentry = _model_subentry("vendor/gone-from-catalog", "Gone")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=2,
+        data=_entry_data(),
+        options=_entry_options(),
+        title="Nous Research",
+        subentries_data=[subentry.as_dict()],
+    )
+    entry.add_to_hass(hass)
+    with patch("custom_components.nous_research.NousClient", FakeClient):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    agent = _agent(hass, entry)
+    # The device tells the truth about what is configured...
+    assert agent._device_model == "vendor/gone-from-catalog"
+    # ...and a request fails instead of being answered by the catalog default.
+    with pytest.raises(HomeAssistantError):
+        _ = agent._model
 
 
 async def test_services(hass: HomeAssistant, setup_integration: MockConfigEntry) -> None:

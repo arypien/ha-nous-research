@@ -72,6 +72,10 @@ Wymaga **Home Assistant 2026.9.0 lub nowszego** oraz klucza API z
    natychmiast, a nie przy pierwszym użyciu.
 4. Na nowym wpisie naciśnij **Dodaj model** i wybierz model czatu z listy
    zwracanej przez API (wyszukiwana lista, dowolny tekst też jest akceptowany).
+   Każda pozycja ma cenę — `FREE` albo `$in/$out za 1M` — a pole startuje na
+   pozycji zastępczej, więc nic nie zostanie dodane bez Twojego wyboru. Jeśli API
+   odrzuci testowe zapytanie dla modelu (tak robią niektóre darmowe warianty),
+   formularz pokazuje komunikat API i pozwala dodać model mimo to.
    Powtórz dla kolejnych modeli.
 
 | Pole | Znaczenie |
@@ -84,8 +88,11 @@ Wymaga **Home Assistant 2026.9.0 lub nowszego** oraz klucza API z
 Żaden identyfikator modelu nie jest zaszyty na stałe: katalog jest agregowany i
 namespace'owany (`vendor/model`, ~300 modeli czatu), więc lista pochodzi z API.
 Endpointy batch (`:batch`), embeddings, TTS i modele tylko-obrazkowe są
-odfiltrowane. Jeśli model podwpisu zniknie z katalogu, ten podwpis zgłasza repair
-issue z prośbą o wybór innego modelu — zamiast wysypywać każde zapytanie.
+odfiltrowane. Nic nie jest zaznaczone z góry i nic nie jest zgadywane: krok wyboru
+modelu odrzuca identyfikator, którego endpoint nie oferuje (`invalid_model`), a gdy model
+podwpisu zniknie później z katalogu, podwpis zgłasza repair
+issue, a jego zapytania kończą się tym komunikatem — zamiast cicho trafiać do innego
+modelu.
 
 ### Opcje
 

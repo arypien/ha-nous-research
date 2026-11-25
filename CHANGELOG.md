@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.1.5
+
+**Free models can be added again, and a refused model no longer hides its reason.**
+
+- **The one-token test no longer blocks the add.** Gated free tiers
+  (`upstage/solar-mini4:free`, `stepfun/step-3.7-flash:free`, …) answer the
+  1-token probe with a 4xx while neighbouring models answer fine, so the add used
+  to end in a generic "cannot connect". Such a model now opens a confirmation step
+  that quotes the API's own message and, if you accept, stores exactly the id you
+  picked. A bad key (`invalid_auth`), empty balance (`no_credits`) or rate limit
+  (`rate_limited`) still fails hard — those are account problems, not model problems.
+- **The dropdown starts on a placeholder row**, `— choose a model —`. Version 0.1.4
+  left the field without a default, but Home Assistant preselects the first option
+  of a dropdown, so the picker still showed the first catalog entry. Now the first
+  row is an explicit "nothing chosen yet" and submitting it returns `model_required`.
+- **Every option is labelled with its price**: `… · FREE` or `… · $in/$out per 1M`,
+  so a free variant is never mistaken for its paid sibling again.
+- **The form shows the running version** (`Integration version: {version}`), which
+  ends the "did my install take?" question.
+- The API message of a refused probe is logged at warning level.
+
+## 0.1.4
+
+**The model you pick is the model that answers.**
+
+- **No preselected model.** *Add model* opens with an empty picker. It used to
+  preselect the first chat model of `/v1/models` — which is whatever the endpoint
+  happens to list first (`upstage/solar-mini-4-5` at the time of writing) — so an
+  untouched form installed a model nobody chose. Reconfiguring still shows the
+  current model.
+- **Model ids are validated against the catalog.** An id the endpoint does not list
+  (a typo, the dropdown label pasted instead of the id, a stale model) is refused on
+  the form with `invalid_model` instead of being stored.
+- **No silent model substitution at request time.** `catalog.resolve_model()` used to
+  fall back to the catalog default for an unknown id: a free model could be answered
+  and billed as a different, paid one while the entity looked fine. The configured id
+  is now used verbatim, the device shows it verbatim, and a request for an id outside
+  the catalog raises "Model '<id>' is not in the API catalog. Pick a model for this
+  subentry again — the request was not sent." alongside the existing repair issue.
+- **Counters follow the configured model.** Cost/token/request sensors are booked
+  under the subentry model, not under whatever `model` the API echoes in the stream,
+  so a provider-side alias can no longer rename `sensor.*_top_model_today` or price a
+  free model with the rates of another one. A mismatch is logged at debug level.
+- **Empty catalog aborts the model step** (`cannot_connect`) instead of offering a
+  guess when `/models` cannot be read.
+- Removed `pick_default_model()` and `resolve_model()`; `known_model()` is the single
+  id check. Docs: dropped a duplicated *Model* row from the README table.
+
 ## 0.1.3
 
 **A config entry is an API account; models are subentries of it.**

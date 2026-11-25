@@ -21,6 +21,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API, CONF_PROMPT
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.loader import async_get_integration
 from homeassistant.helpers.selector import (
     BooleanSelector,
     NumberSelector,
@@ -41,7 +42,7 @@ from .api import (
     NousPaymentRequiredError,
     NousRateLimitError,
 )
-from .catalog import is_chat_model, model_id, pick_default_model
+from .catalog import chat_model_ids, is_chat_model, model_id
 from .const import (
     CONF_BASE_URL,
     CONF_BUDGET,
@@ -67,6 +68,7 @@ _LOGGER = logging.getLogger(__package__)
 
 # Entry fields that are not exposed by const.py
 CONF_NAME = "name"
+CONF_ADD_ANYWAY = "add_anyway"
 
 LLM_API_NONE = "none"
 LLM_API_ASSIST = "assist"
@@ -114,27 +116,76 @@ def _async_model_conflict(
     return None
 
 
+#: Value of the "nothing chosen yet" row of the model dropdown.
+PLACEHOLDER_MODEL = ""
+
+#: Label of that row, per UI language, so the form cannot look pre-filled.
+PLACEHOLDER_LABELS = {
+    "pl": "— wybierz model —",
+}
+PLACEHOLDER_LABEL_DEFAULT = "— choose a model —"
+
+#: Probe failures that still mean "the account works, this model refused the call".
+SOFT_PROBE_ERRORS = ("model_unavailable",)
+
+
+def _placeholder_label(language: str | None) -> str:
+    """Return the empty-selection label for the current UI language."""
+    code = str(language or "").split("-")[0].lower()
+    return PLACEHOLDER_LABELS.get(code, PLACEHOLDER_LABEL_DEFAULT)
+
+
+def _price_label(model: dict[str, Any]) -> str:
+    """Return a short ``FREE`` or ``$in/$out per 1M`` tag for a catalog entry."""
+    pricing = model.get("pricing")
+    if not isinstance(pricing, dict):
+        return ""
+    try:
+        prompt = float(pricing.get("prompt") or 0)
+        completion = float(pricing.get("completion") or 0)
+    except (TypeError, ValueError):
+        return ""
+    if not prompt and not completion:
+        return "FREE"
+
+    def _fmt(value: float) -> str:
+        text = f"{value * 1_000_000:.4f}".rstrip("0").rstrip(".")
+        return text or "0"
+
+    return f"${_fmt(prompt)}/${_fmt(completion)} per 1M"
+
+
 def _chat_model_options(
-    catalog: Iterable[dict[str, Any]] | None,
+    catalog: Iterable[dict[str, Any]] | None, placeholder: str
 ) -> list[dict[str, str]]:
-    """Build searchable dropdown entries from the catalog."""
-    options: list[dict[str, str]] = []
+    """Build searchable dropdown entries, tagged with their price.
+
+    The first row is a placeholder: Home Assistant preselects the first option of
+    a dropdown, so without it an untouched form silently installs whichever model
+    happens to sit at the top of the catalog (a paid sibling of the free one).
+    """
+    options: list[dict[str, str]] = [
+        {"value": PLACEHOLDER_MODEL, "label": placeholder}
+    ]
     for model in catalog or []:
         if not is_chat_model(model):
             continue
         identifier = model_id(model)
         name = str(model.get("name") or identifier)
-        options.append({"value": identifier, "label": f"{name} ({identifier})"})
+        label = f"{name} · {identifier}"
+        if price := _price_label(model):
+            label = f"{label} · {price}"
+        options.append({"value": identifier, "label": label})
     return options
 
 
 def _chat_model_options_with(
-    catalog: Iterable[dict[str, Any]] | None, current: str
+    catalog: Iterable[dict[str, Any]] | None, current: str, placeholder: str
 ) -> list[dict[str, str]]:
     """Build dropdown entries, keeping ``current`` selectable when missing."""
-    options = _chat_model_options(catalog)
+    options = _chat_model_options(catalog, placeholder)
     if current and current not in {option["value"] for option in options}:
-        options.insert(0, {"value": current, "label": current})
+        options.insert(1, {"value": current, "label": current})
     return options
 
 
@@ -163,25 +214,41 @@ async def _async_fetch_catalog(
         return [], "unknown"
 
 
-async def _async_validate(
+async def _async_version(hass: HomeAssistant) -> str:
+    """Return the integration version, so a form shows which code is running."""
+    try:
+        integration = await async_get_integration(hass, DOMAIN)
+    except Exception:  # noqa: BLE001
+        return "?"
+    return str(integration.version or "?")
+
+
+async def _async_probe(
     hass: HomeAssistant, api_key: str, base_url: str, model: str
-) -> dict[str, str]:
-    """Validate credentials with a minimal request, returning form errors."""
+) -> tuple[str | None, str]:
+    """Send the smallest chat request and report what the API answered.
+
+    ``(None, "")`` means the model answered. ``model_unavailable`` means the
+    account is fine but this one model refused the call — free tiers are often
+    gated upstream, so the caller offers to store it anyway instead of hiding the
+    real message behind a generic "cannot connect".
+    """
     client = NousClient(hass, api_key, base_url)
     try:
         await client.async_validate(model)
-    except NousAuthError:
-        return {"base": "invalid_auth"}
-    except NousPaymentRequiredError:
-        return {"base": "no_credits"}
-    except NousRateLimitError:
-        return {"base": "rate_limited"}
-    except (NousConnectionError, NousApiError):
-        return {"base": "cannot_connect"}
-    except Exception:  # noqa: BLE001
+    except NousAuthError as err:
+        return "invalid_auth", str(err)
+    except NousPaymentRequiredError as err:
+        return "no_credits", str(err)
+    except NousRateLimitError as err:
+        return "rate_limited", str(err)
+    except (NousConnectionError, NousApiError) as err:
+        _LOGGER.warning("Nous API refused the test request for %s: %s", model, err)
+        return "model_unavailable", str(err)
+    except Exception as err:  # noqa: BLE001
         _LOGGER.exception("Unexpected error while validating the Nous API key")
-        return {"base": "unknown"}
-    return {}
+        return "unknown", str(err) or "unknown error"
+    return None, ""
 
 
 class NousConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -467,6 +534,13 @@ class ModelSubentryFlow(ConfigSubentryFlow):
     Task entity. Key, prompt, tools and cost sensors are shared with the entry.
     """
 
+    def __init__(self) -> None:
+        """Initialize the subentry flow."""
+        super().__init__()
+        self._pending: tuple[str, str, ConfigSubentry | None] | None = None
+        self._pending_message = ""
+        self._version = "?"
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
@@ -481,19 +555,41 @@ class ModelSubentryFlow(ConfigSubentryFlow):
             user_input, subentry=self._get_reconfigure_subentry()
         )
 
+    async def async_step_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Store a model the API refused to test, if the user asks for it."""
+        if user_input is not None:
+            pending = self._pending
+            subentry = pending[2] if pending else None
+            if pending is not None and user_input.get(CONF_ADD_ANYWAY, False):
+                self._pending = None
+                model, title, _ = pending
+                return self._async_store(self._get_entry(), subentry, model, title)
+            if not user_input.get(CONF_CHAT_MODEL):
+                # Declined: show the model form again, nothing is stored.
+                return await self._async_model_step(None, subentry=subentry)
+            return await self._async_model_step(user_input, subentry=subentry)
+        return self._async_show_confirm()
+
     async def _async_model_step(
         self, user_input: dict[str, Any] | None, subentry: ConfigSubentry | None
     ) -> SubentryFlowResult:
         """Show the model form and store the selection."""
         entry = self._get_entry()
         catalog = await self._async_catalog(entry)
+        if not catalog:
+            # Without the catalog no id can be validated, and guessing one is worse
+            # than failing: the account entry keeps working, the model does not.
+            return self.async_abort(reason="cannot_connect")
+        available = set(chat_model_ids(catalog))
         current = str(subentry.data.get(CONF_CHAT_MODEL) or "") if subentry else ""
-        default_model = current or pick_default_model(catalog)
         default_title = subentry.title if subentry else ""
+        self._version = await _async_version(self.hass)
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            model = str(user_input.get(CONF_CHAT_MODEL) or "").strip() or default_model
+            model = str(user_input.get(CONF_CHAT_MODEL) or "").strip()
             title = (
                 str(user_input.get(CONF_NAME) or "").strip()
                 or default_title
@@ -502,6 +598,10 @@ class ModelSubentryFlow(ConfigSubentryFlow):
 
             if not model:
                 errors[CONF_CHAT_MODEL] = "model_required"
+            elif model not in available:
+                # Never store an id the endpoint does not list: a typo used to be
+                # silently replaced by another model at request time.
+                errors[CONF_CHAT_MODEL] = "invalid_model"
             elif _model_in_use(
                 entry,
                 model,
@@ -509,36 +609,40 @@ class ModelSubentryFlow(ConfigSubentryFlow):
             ):
                 errors[CONF_CHAT_MODEL] = "model_in_use"
             else:
-                # Reuse the entry credentials: a subentry never stores its own key.
-                errors = await _async_validate(
+                error_key, message = await _async_probe(
                     self.hass,
                     str(entry.data.get(CONF_API_KEY) or ""),
                     entry.data.get(CONF_BASE_URL) or DEFAULT_BASE_URL,
                     model,
                 )
-
-            if not errors:
-                data = {CONF_CHAT_MODEL: model}
-                if subentry is None:
-                    return self.async_create_entry(
-                        title=title, data=data, unique_id=model
-                    )
-                # async_update_reload_and_abort refuses entries with update
-                # listeners; the entry update listener triggers the reload that
-                # recreates the AI Task entities.
-                return self.async_update_and_abort(
-                    entry, subentry, title=title, data=data, unique_id=model
-                )
+                if error_key in SOFT_PROBE_ERRORS:
+                    # A free tier that refuses our one-token test still belongs to
+                    # the catalog; show what the API said and let the user decide.
+                    self._pending = (model, title, subentry)
+                    self._pending_message = message
+                    return self._async_show_confirm()
+                if error_key:
+                    errors["base"] = error_key
+                else:
+                    return self._async_store(entry, subentry, model, title)
 
         return self.async_show_form(
             step_id="reconfigure" if subentry is not None else "user",
             data_schema=vol.Schema(
                 {
+                    # No preselected model: an untouched form must not quietly
+                    # install whichever id happens to sit first in the catalog.
                     vol.Required(
-                        CONF_CHAT_MODEL, default=default_model
+                        CONF_CHAT_MODEL, default=current or vol.UNDEFINED
                     ): SelectSelector(
                         SelectSelectorConfig(
-                            options=_chat_model_options_with(catalog, default_model),
+                            options=_chat_model_options_with(
+                                catalog,
+                                current,
+                                _placeholder_label(self.hass.config.language),
+                            ),
+                            # Free text is accepted by the selector so a wrong id
+                            # reaches the form error, not a generic schema failure.
                             custom_value=True,
                         )
                     ),
@@ -546,7 +650,46 @@ class ModelSubentryFlow(ConfigSubentryFlow):
                 }
             ),
             errors=errors,
-            description_placeholders={"name": entry.title},
+            description_placeholders={
+                "name": entry.title,
+                "version": self._version,
+            },
+        )
+
+    @callback
+    def _async_store(
+        self,
+        entry: ConfigEntry,
+        subentry: ConfigSubentry | None,
+        model: str,
+        title: str,
+    ) -> SubentryFlowResult:
+        """Create or update the model subentry."""
+        # Reuse the entry credentials: a subentry never stores its own key.
+        data = {CONF_CHAT_MODEL: model}
+        if subentry is None:
+            return self.async_create_entry(title=title, data=data, unique_id=model)
+        # async_update_reload_and_abort refuses entries with update listeners; the
+        # entry update listener triggers the reload that recreates the AI Task
+        # entities.
+        return self.async_update_and_abort(
+            entry, subentry, title=title, data=data, unique_id=model
+        )
+
+    @callback
+    def _async_show_confirm(self) -> SubentryFlowResult:
+        """Ask whether to keep a model the API failed to answer for."""
+        model = self._pending[0] if self._pending else ""
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_ADD_ANYWAY, default=False): BooleanSelector()}
+            ),
+            description_placeholders={
+                "model": model,
+                "error": self._pending_message or "unknown",
+                "version": self._version,
+            },
         )
 
     async def _async_catalog(self, entry: ConfigEntry) -> list[dict[str, Any]]:

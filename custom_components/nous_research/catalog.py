@@ -1,4 +1,4 @@
-"""Catalog helpers: pick a usable chat model out of the API model list.
+"""Catalog helpers: read the API model list and validate model ids.
 
 The Nous API returns an aggregated, OpenRouter-style catalog where ids are
 namespaced (``vendor/model``), so no model id can be hardcoded in the
@@ -52,27 +52,6 @@ def is_chat_model(model: Any) -> bool:
 def chat_model_ids(catalog: Iterable[Any] | None) -> list[str]:
     """Return the ids of the chat-capable models, in catalog order."""
     return [model_id(model) for model in catalog or [] if is_chat_model(model)]
-
-
-def pick_default_model(catalog: Iterable[Any] | None) -> str:
-    """Return the first chat-capable model of the catalog, else its first id."""
-    entries = [model for model in catalog or [] if isinstance(model, dict)]
-    for model in entries:
-        if is_chat_model(model):
-            return model_id(model)
-    return model_id(entries[0]) if entries else ""
-
-
-def resolve_model(configured: str | None, catalog: Iterable[Any] | None) -> str:
-    """Return the model to use, falling back to a catalog default.
-
-    The configured id wins whenever it is listed; otherwise the catalog
-    default is used so a stale id does not break the whole integration.
-    """
-    entries = [model for model in catalog or [] if isinstance(model, dict)]
-    if configured and configured in model_ids(entries):
-        return configured
-    return pick_default_model(entries) or (configured or "")
 
 
 def known_model(configured: str | None, catalog: Iterable[Any] | None) -> bool:

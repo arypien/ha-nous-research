@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
+
+import voluptuous as vol
 from unittest.mock import patch
 
 import pytest
@@ -41,6 +43,8 @@ CATALOG = [
     {"id": "vendor/embed-1", "architecture": {"output_modalities": ["text"]}},
     {"id": "vendor/model-b:batch"},
     {"id": "vendor/model-a", "architecture": {"output_modalities": ["text"]}},
+    {"id": "vendor/model-c", "architecture": {"output_modalities": ["text"]}},
+    {"id": "vendor/model-d", "architecture": {"output_modalities": ["text"]}},
 ]
 
 CHAT_MODEL = "vendor/model-a"
@@ -53,6 +57,8 @@ class FakeClient:
 
     error: Exception | None = None
     models: list[dict[str, Any]] = CATALOG
+    #: Chat probe failures keyed by model id; the catalog keeps working.
+    probe_errors: dict[str, Exception] = {}
 
     def __init__(self, hass: HomeAssistant, api_key: str, base_url: str) -> None:
         self.hass = hass
@@ -66,7 +72,7 @@ class FakeClient:
         return self.models
 
     async def async_validate(self, model: str) -> None:
-        error = type(self).error
+        error = type(self).probe_errors.get(model) or type(self).error
         if error is not None:
             raise error
 
@@ -84,6 +90,7 @@ def fake_client() -> Any:
     with patch.object(cf, "NousClient", FakeClient):
         FakeClient.error = None
         FakeClient.models = CATALOG
+        FakeClient.probe_errors = {}
         yield
 
 
@@ -323,8 +330,8 @@ async def test_subentry_rejects_model_in_use(hass: HomeAssistant) -> None:
     assert len(hass.config_entries.async_get_entry(entry.entry_id).subentries) == 1
 
 
-async def test_subentry_accepts_custom_model(hass: HomeAssistant) -> None:
-    """A model id outside the catalog can still be pasted in."""
+async def test_subentry_rejects_model_outside_catalog(hass: HomeAssistant) -> None:
+    """An id the endpoint does not list is refused, never stored and swapped later."""
     entry = _mock_entry(hass)
 
     result = await _async_start_subentry(hass, entry)
@@ -332,10 +339,51 @@ async def test_subentry_accepts_custom_model(hass: HomeAssistant) -> None:
         result["flow_id"], {CONF_CHAT_MODEL: "vendor/not-in-catalog"}
     )
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_CHAT_MODEL: "invalid_model"}
     entry = hass.config_entries.async_get_entry(entry.entry_id)
-    subentry = next(iter(entry.subentries.values()))
-    assert subentry.data[CONF_CHAT_MODEL] == "vendor/not-in-catalog"
+    assert not entry.subentries
+
+
+async def test_subentry_rejects_the_model_label(hass: HomeAssistant) -> None:
+    """Pasting the dropdown label instead of the id is refused with a clear error."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: "Vendor: Model A (vendor/model-a)"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_CHAT_MODEL: "invalid_model"}
+
+
+async def test_subentry_requires_an_explicit_model(hass: HomeAssistant) -> None:
+    """An untouched form is an error: no model is preselected for you."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+    marker = next(iter(result["data_schema"].schema))
+    assert marker.default is vol.UNDEFINED
+
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: "  "}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_CHAT_MODEL: "model_required"}
+
+
+async def test_subentry_aborts_without_catalog(hass: HomeAssistant) -> None:
+    """An empty catalog aborts instead of offering a guess."""
+    FakeClient.models = []
+    try:
+        entry = _mock_entry(hass)
+        result = await _async_start_subentry(hass, entry)
+    finally:
+        FakeClient.models = CATALOG
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "cannot_connect"
 
 
 async def test_subentry_reconfigure(hass: HomeAssistant) -> None:
@@ -368,3 +416,93 @@ async def test_subentry_reconfigure(hass: HomeAssistant) -> None:
     assert subentry.data[CONF_CHAT_MODEL] == THIRD_MODEL
     assert subentry.title == "Renamed"
     assert subentry.unique_id == THIRD_MODEL
+
+
+async def test_subentry_starts_with_a_placeholder_row(hass: HomeAssistant) -> None:
+    """The dropdown opens on a placeholder, so an untouched form installs nothing."""
+    entry = _mock_entry(hass)
+
+    result = await _async_start_subentry(hass, entry)
+
+    options = next(iter(result["data_schema"].schema.values())).config["options"]
+    assert options[0] == {"value": "", "label": cf.PLACEHOLDER_LABEL_DEFAULT}
+    assert [option["value"] for option in options].count(CHAT_MODEL) == 1
+
+
+async def test_subentry_labels_tag_free_and_paid_models(hass: HomeAssistant) -> None:
+    """Labels carry the price, so a free variant is not confused with its sibling."""
+    FakeClient.models = [
+        {
+            "id": "vendor/free",
+            "name": "Vendor: Free",
+            "pricing": {"prompt": "0", "completion": "0"},
+        },
+        {
+            "id": "vendor/paid",
+            "name": "Vendor: Paid",
+            "pricing": {"prompt": "0.0000001", "completion": "0.0000004"},
+        },
+    ]
+    try:
+        entry = _mock_entry(hass)
+        result = await _async_start_subentry(hass, entry)
+    finally:
+        FakeClient.models = CATALOG
+
+    options = next(iter(result["data_schema"].schema.values())).config["options"]
+    labels = {option["value"]: option["label"] for option in options}
+    assert labels["vendor/free"].endswith("FREE")
+    assert "$0.1/$0.4 per 1M" in labels["vendor/paid"]
+
+
+async def test_subentry_offers_to_add_a_model_the_api_refuses(
+    hass: HomeAssistant,
+) -> None:
+    """A gated free model shows the API message and can still be stored by choice."""
+    entry = _mock_entry(hass)
+    FakeClient.probe_errors = {
+        OTHER_MODEL: NousApiError(404, "No endpoints found for vendor/model-c:free")
+    }
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "confirm"
+    assert "No endpoints found" in result["description_placeholders"]["error"]
+    assert not hass.config_entries.async_get_entry(entry.entry_id).subentries
+
+    # Declining shows the model form again and stores nothing.
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {cf.CONF_ADD_ANYWAY: False}
+    )
+    assert result["step_id"] == "user"
+    assert not hass.config_entries.async_get_entry(entry.entry_id).subentries
+
+    # Asking again offers the same choice, accepting stores the requested id.
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL}
+    )
+    assert result["step_id"] == "confirm"
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {cf.CONF_ADD_ANYWAY: True}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert next(iter(entry.subentries.values())).unique_id == OTHER_MODEL
+
+
+async def test_subentry_still_hard_fails_on_a_bad_key(hass: HomeAssistant) -> None:
+    """An auth failure is never papered over with the confirm step."""
+    entry = _mock_entry(hass)
+    FakeClient.probe_errors = {OTHER_MODEL: NousAuthError("bad key")}
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert not hass.config_entries.async_get_entry(entry.entry_id).subentries

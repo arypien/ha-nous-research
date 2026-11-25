@@ -6,9 +6,10 @@
     "error": {
       "cannot_connect": "Cannot reach the Nous Research API.",
       "invalid_auth": "Invalid API key.",
+      "invalid_model": "This model is not offered by the catalog of this endpoint.",
       "invalid_url": "Invalid API base URL.",
       "model_in_use": "This model is already used by this entry or one of its subentries.",
-      "model_required": "Choose a model from the list or paste a model ID.",
+      "model_required": "Pick a model from the list.",
       "no_credits": "The account has no credits left.",
       "rate_limited": "Rate limit reached. Try again in a moment.",
       "unknown": "Unexpected error."
@@ -40,14 +41,16 @@
   "config_subentries": {
     "model": {
       "abort": {
+        "cannot_connect": "Cannot reach the Nous Research API, so the model list is unavailable. Try again in a moment.",
         "reconfigure_successful": "The model was updated."
       },
       "entry_type": "Model",
       "error": {
         "cannot_connect": "Cannot reach the Nous Research API.",
         "invalid_auth": "Invalid API key.",
+        "invalid_model": "This model is not offered by the catalog of this endpoint.",
         "model_in_use": "This model already has a subentry on this entry.",
-        "model_required": "Choose a model from the list or paste a model ID.",
+        "model_required": "Pick a model from the list.",
         "no_credits": "The account has no credits left.",
         "rate_limited": "Rate limit reached. Try again in a moment.",
         "unknown": "Unexpected error."
@@ -57,16 +60,26 @@
         "user": "Add model"
       },
       "step": {
+        "confirm": {
+          "data": {
+            "add_anyway": "Add the model anyway"
+          },
+          "data_description": {
+            "add_anyway": "Leave this off to go back and pick another model."
+          },
+          "description": "The Nous Research API answered the one-token test request for {model} with an error: {error}\n\nAdd it anyway? If the model really is unavailable, the entity will fail on its first conversation. The account key stays valid either way.",
+          "title": "Add the model anyway?"
+        },
         "reconfigure": {
           "data": {
             "chat_model": "Model",
             "name": "Name"
           },
           "data_description": {
-            "chat_model": "Model ID from the catalog of this entry's endpoint, or any custom model ID.",
+            "chat_model": "Chat model from the catalog of this endpoint.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.",
+          "description": "Change the model, or the name of the Assist agent and AI Task entity it creates, for {name}.\n\nIntegration version: {version}.",
           "title": "Reconfigure model"
         },
         "user": {
@@ -75,10 +88,10 @@
             "name": "Name"
           },
           "data_description": {
-            "chat_model": "Model ID from the catalog of this entry's endpoint, or any custom model ID.",
+            "chat_model": "Chat model from the catalog of this endpoint.",
             "name": "Name of the generated Assist agent and AI Task entity. Defaults to the model ID."
           },
-          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.",
+          "description": "Add a model to {name}. It gets its own Assist agent (a conversation.* entity you can pick in Assist and in pipelines), its own AI Task entity and its own cost, token and price sensors. Only the API key, the prompt and the tools are shared with the entry.\n\nIntegration version: {version}.",
           "title": "Add model"
         }
       }

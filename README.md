@@ -9,7 +9,7 @@
   <a href="https://github.com/hacs/integration"><img alt="HACS custom repository" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
   <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-68%20passing-3DA639.svg?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-97%20passing-3DA639.svg?style=flat-square">
   <img alt="Translations" src="https://img.shields.io/badge/i18n-EN%20%7C%20PL-8A63D2.svg?style=flat-square">
 </p>
 
@@ -37,6 +37,10 @@ tokens and spend computed on your own instance.
   and price sensors, all starting at zero.
 - **Live model catalog** — prices, context lengths and modalities straight from
   `/v1/models`; each model is validated against it.
+- **Sorted model list** — the add-model dropdown opens **cheapest first**, so the free
+  models sit on top instead of being buried between expensive siblings. The order is
+  chosen once (price ascending, price descending, name, newest) — on the API key form
+  or later under **Configure** — and every model entry is labelled with its price.
 - **Long-term statistics** — cost sensors push `total` statistics, so history
   survives recorder purges and works in Statistics Graph cards.
 - **Bilingual UI** — English and Polish, with a
@@ -69,7 +73,8 @@ Requires **Home Assistant 2026.9.0 or newer** and an API key from
 1. Create an API key in the Nous portal.
 2. **Settings → Devices & services → Add integration → Nous Research**.
 3. Paste the key — the catalog is fetched right away, so a revoked key fails
-   immediately instead of at first use.
+   immediately instead of at first use. The form ends with **Model list order**, so the
+   dropdown is already sorted the way you want it (changeable later under Configure).
 4. On the new entry press **Add model** and pick a chat model from the list the
    API reports (searchable dropdown, free text allowed). Every option carries its
    price — `FREE` or `$in/$out per 1M` — and the field starts on a placeholder, so
@@ -83,6 +88,7 @@ Requires **Home Assistant 2026.9.0 or newer** and an API key from
 | Base URL | Defaults to `https://inference-api.nousresearch.com/v1` |
 | Name | Entry name, also the prefix of the created entities |
 | Model | Picked per subentry (after the entry exists), from the live `/models` catalog |
+| Model list order | Order of that dropdown: cheapest first (default), most expensive first, name A-Z, newest |
 
 No model id is hardcoded: the catalog is aggregated and namespaced
 (`vendor/model`, ~300 chat models), so the list comes from the API. Batch endpoints
@@ -96,7 +102,8 @@ quietly answered by some other model.
 
 **Configure** on the entry covers the system prompt, exposed HA API, model,
 `max_tokens`, `temperature`, reasoning mode, cost sensors, budget and catalog
-refresh interval. The model is not an option: it lives in the model subentries.
+refresh interval, **and the order of the model list**. The model is not an option: it
+lives in the model subentries.
 
 ## Reasoning modes
 

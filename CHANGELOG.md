@@ -1,114 +1,58 @@
 # Changelog
 
-## 0.1.9
-
-**The model order is offered where you add the account, and the version line is gone.**
-
-- The API key form now ends with *Sortowanie listy modeli / Model list order*, so the
-  order is set once, while the key is still in front of you - no detour through
-  Configure afterwards. What the form submits is stored in the entry options (unknown
-  values fall back to `price_asc`; the selector already rejects them server-side).
-- Dropped the *Integration version: x.y.z* line from the add-model and reconfigure
-  forms. The integration version belongs on the entry page, not in a form about a model.
-- en/pl translations updated (117/117 keys); a `{version}` placeholder left in a string
-  without a matching placeholder would render literally, so both were removed together.
-- 97 tests green: the order field sits last on the key form, the choice reaches the entry
-  options, `_valid_sort` guards it, and the model form no longer carries a version.
-
-## 0.1.8
-
-**The sort control moved out of the model form and into the integration options.**
-
-- 0.1.7 put a *sort* dropdown inside the add-model form and relied on "change it and
-  submit" re-rendering the list. That cannot work: Home Assistant will not submit that
-  step without a model, so the list never re-sorted - the option looked dead.
-- The order is now the **Model list order / Sortowanie listy modeli** option, next to the
-  prompt and the temperature (Configure -> the entry). Pick it once, then *Add model*:
-  the dropdown opens in that order. Cheapest-first (free models on top) stays the default.
-- The model form description says which option controls the order and where to change it.
-- Model form keeps just the two fields it needs; en/pl translations updated (115/115).
-- 93 tests green: default option on new entries, the options form persisting the choice,
-  and the model list following it (price descending checked against a real catalog shape).
-
-## 0.1.7
-
-**The model list is now sorted, and you can re-sort it without leaving the form.**
-
-- **Cheapest first by default.** The 307 chat models used to appear in catalog order, so
-  the three free variants were buried among paid siblings with the same prefix. The
-  dropdown now starts with the free models (price 0) and walks up the price ladder;
-  models that advertise no price go *last* instead of posing as free.
-- **Sort field in the form.** *Sortowanie listy* offers price ascending, price descending,
-  name A-Z and newest first. Change it and submit: the same dialog comes back reordered,
-  nothing is stored until a model is actually picked.
-- Ordering lives in `catalog.sorted_chat_models()` (`SORT_*` constants in `const.py`), so
-  the model dropdown, the reconfigure step and any future list share one implementation.
-- en/pl translations for the new field and its four choices (117/117 keys).
-- 92 tests green, including ordering by price/name/age and the re-render-without-storing
-  path.
-
-## 0.1.6
-
-**Every request now carries the `tags` the gateway demands.**
-
-- **`400 … missing tags` fixed.** The Nous gateway wants a top-level `tags` array with a
-  `user=` tag on *every* `/chat/completions` call; without it the request is refused
-  before a single token is generated. That is the real reason
-  `upstage/solar-mini4:free` and `stepfun/step-3.7-flash:free` failed while paid models
-  and `tencent/hy4-flash:free` worked. Streamed and non-streamed calls now send
-  `"tags": ["user=home-assistant"]` (`API_TAGS` in `const.py`), and the 1-token probe
-  sends it too — so free models validate on the first attempt.
-- 0.1.5's *add anyway* step stays as the fallback for a model the API genuinely refuses,
-  quoting the gateway's own message instead of a generic connection error.
-
-## 0.1.5
-
-**Free models can be added again, and a refused model no longer hides its reason.**
-
-- **The one-token test no longer blocks the add.** Gated free tiers
-  (`upstage/solar-mini4:free`, `stepfun/step-3.7-flash:free`, …) answer the
-  1-token probe with a 4xx while neighbouring models answer fine, so the add used
-  to end in a generic "cannot connect". Such a model now opens a confirmation step
-  that quotes the API's own message and, if you accept, stores exactly the id you
-  picked. A bad key (`invalid_auth`), empty balance (`no_credits`), a rate limit
-  (`rate_limited`) or a dead connection (`cannot_connect`) still fails hard — those are
-  account problems, not model problems.
-- **The dropdown starts on a placeholder row**, `— choose a model —`. Version 0.1.4
-  left the field without a default, but Home Assistant preselects the first option
-  of a dropdown, so the picker still showed the first catalog entry. Now the first
-  row is an explicit "nothing chosen yet" and submitting it returns `model_required`.
-- **Every option is labelled with its price**: `… · FREE` or `… · $in/$out per 1M`,
-  so a free variant is never mistaken for its paid sibling again.
-- **The form shows the running version** (`Integration version: {version}`), which
-  ends the "did my install take?" question.
-- The API message of a refused probe is logged at warning level.
-
 ## 0.1.4
 
-**The model you pick is the model that answers.**
+**The model list got honest — no guessed model, real prices, cheapest first.**
+
+Everything below landed between 0.1.3 and this release; the intermediate version
+numbers were never published.
+
+### You pick the model, and that model answers
 
 - **No preselected model.** *Add model* opens with an empty picker. It used to
-  preselect the first chat model of `/v1/models` — which is whatever the endpoint
-  happens to list first (`upstage/solar-mini-4-5` at the time of writing) — so an
-  untouched form installed a model nobody chose. Reconfiguring still shows the
-  current model.
+  preselect the first chat model of `/v1/models` — whatever the endpoint happens to
+  list first (`upstage/solar-mini-4-5` at the time of writing) — so an untouched form
+  installed a model nobody chose. Reconfiguring still shows the current model.
+- **Every option carries its price** — `FREE` or `$in/$out per 1M`, from the catalog,
+  never padded.
 - **Model ids are validated against the catalog.** An id the endpoint does not list
   (a typo, the dropdown label pasted instead of the id, a stale model) is refused on
   the form with `invalid_model` instead of being stored.
-- **No silent model substitution at request time.** `catalog.resolve_model()` used to
-  fall back to the catalog default for an unknown id: a free model could be answered
-  and billed as a different, paid one while the entity looked fine. The configured id
-  is now used verbatim, the device shows it verbatim, and a request for an id outside
-  the catalog raises "Model '<id>' is not in the API catalog. Pick a model for this
-  subentry again — the request was not sent." alongside the existing repair issue.
+- **Free models can be added.** A 4xx from the one-token probe (gated free tiers do
+  answer 400/403) quotes the API's message and offers *add anyway*; a network failure
+  is still a hard error, because then nothing is known about the model.
+- **No silent model substitution.** The configured id is used verbatim, and a request
+  for an id outside the catalog fails with a message naming it instead of being
+  answered - and billed - as another model.
 - **Counters follow the configured model.** Cost/token/request sensors are booked
-  under the subentry model, not under whatever `model` the API echoes in the stream,
-  so a provider-side alias can no longer rename `sensor.*_top_model_today` or price a
-  free model with the rates of another one. A mismatch is logged at debug level.
+  under the subentry model, not under whatever `model` the API echoes back, so an
+  alias cannot rename `sensor.*_top_model_today` or price a free model with paid rates.
+- **The gateway-mandatory `tags` field** is sent on every chat call; without it the
+  inference gateway answered `400 missing tags` for some free variants.
 - **Empty catalog aborts the model step** (`cannot_connect`) instead of offering a
   guess when `/models` cannot be read.
-- Removed `pick_default_model()` and `resolve_model()`; `known_model()` is the single
-  id check. Docs: dropped a duplicated *Model* row from the README table.
+
+### Cheapest first, and you decide the order
+
+- **The dropdown is sorted.** Catalog order buried the three `:free` variants among
+  their paid siblings, so the list now opens **cheapest first** on the live catalog
+  (307 chat models: free ones first, then $0.01/1M and up). Models that advertise no
+  price sort **last** instead of posing as free.
+- **The order is an integration option** — *Model list order / Sortowanie listy
+  modeli*: price ascending (default), price descending, name A-Z, newest first. It
+  sits on the **API key form** (so it is set while you add the account) and under
+  **Configure** afterwards.
+- The model form itself is back to the two fields it needs (*model*, *name*) and no
+  longer prints the integration version: the version belongs on the entry page, and a
+  `{version}` placeholder without its string renders literally.
+
+### Housekeeping
+
+- `sorted_chat_models()` in `catalog.py` owns the ordering (`SORT_*` in `const.py`), so
+  the model step and the reconfigure step share one implementation.
+- en/pl translations complete (117/117 keys), README and `info.md` describe the option.
+- 97 tests (catalog ordering by price/name/age, the option reaching the entry, the
+  placeholder row staying first, the probe fallbacks).
 
 ## 0.1.3
 

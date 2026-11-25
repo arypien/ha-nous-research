@@ -9,7 +9,7 @@
   <a href="https://github.com/hacs/integration"><img alt="Repozytorium własne HACS" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
   <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
   <a href="LICENSE"><img alt="Licencja MIT" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
-  <img alt="Testy" src="https://img.shields.io/badge/testy-78%20passing-3DA639.svg?style=flat-square">
+  <img alt="Testy" src="https://img.shields.io/badge/testy-97%20passing-3DA639.svg?style=flat-square">
   <img alt="Tłumaczenia" src="https://img.shields.io/badge/i18n-EN%20%7C%20PL-8A63D2.svg?style=flat-square">
 </p>
 
@@ -37,6 +37,11 @@ liczy się na Twojej instancji.
   tokenów, zapytań i ceny, startujące od zera.
 - **Żywy katalog modeli** — ceny, długość kontekstu i modalności prosto z
   `/v1/models`; każdy model jest weryfikowany względem katalogu.
+- **Posortowana lista modeli** — lista w oknie dodawania modelu otwiera się **od
+  najtańszych**, więc darmowe modele są na górze, a nie w środku droższych sąsiadów.
+  Kolejność wybierasz raz (cena rosnąco, cena malejąco, nazwa, najnowsze) — w
+  formularzu klucza API albo później w **Konfiguruj** — a każda pozycja ma etykietę
+  z ceną.
 - **Statystyki długoterminowe** — sensory kosztów wysyłają statystyki `total`,
   więc historia przeżywa czyszczenie recorder-a i działa w kartach Statistics Graph.
 - **Interfejs dwujęzyczny** — angielski i polski, plus
@@ -69,7 +74,9 @@ Wymaga **Home Assistant 2026.9.0 lub nowszego** oraz klucza API z
 1. Utwórz klucz API w portalu Nous.
 2. **Ustawienia → Urządzenia i usługi → Dodaj integrację → Nous Research**.
 3. Wklej klucz — katalog jest pobierany od razu, więc unieważniony klucz zawodzi
-   natychmiast, a nie przy pierwszym użyciu.
+   natychmiast, a nie przy pierwszym użyciu. Formularz kończy się polem **Sortowanie
+   listy modeli**, więc lista od razu układa się po Twojemu (zmienisz też później
+   w Konfiguruj).
 4. Na nowym wpisie naciśnij **Dodaj model** i wybierz model czatu z listy
    zwracanej przez API (wyszukiwana lista, dowolny tekst też jest akceptowany).
    Każda pozycja ma cenę — `FREE` albo `$in/$out za 1M` — a pole startuje na
@@ -84,6 +91,7 @@ Wymaga **Home Assistant 2026.9.0 lub nowszego** oraz klucza API z
 | Adres bazowy | Domyślnie `https://inference-api.nousresearch.com/v1` |
 | Nazwa | Nazwa wpisu, jednocześnie prefiks tworzonych encji |
 | Model | Wybierany per podwpis (po utworzeniu wpisu) z żywego katalogu `/models` |
+| Sortowanie listy modeli | Kolejność tej listy: od najtańszych (domyślnie), od najdroższych, nazwa A-Z, najnowsze |
 
 Żaden identyfikator modelu nie jest zaszyty na stałe: katalog jest agregowany i
 namespace'owany (`vendor/model`, ~300 modeli czatu), więc lista pochodzi z API.
@@ -97,9 +105,9 @@ modelu.
 ### Opcje
 
 **Konfiguruj** na wpisie obejmuje prompt systemowy, wystawione API HA,
-`max_tokens`, `temperature`, tryb rozumowania, sensory kosztów, budżet oraz
-interwał odświeżania katalogu. Model nie jest opcją wpisu — siedzi w podwpisach
-modeli.
+`max_tokens`, `temperature`, tryb rozumowania, sensory kosztów, budżet,
+interwał odświeżania katalogu **oraz kolejność listy modeli**. Model nie jest opcją
+wpisu — siedzi w podwpisach modeli.
 
 ## Tryby rozumowania
 
@@ -156,7 +164,8 @@ Wpis integracji to jedno konto API: trzyma klucz, prompt, narzędzia i sensory
 zbiorcze, a po dodaniu zaczyna się pusty (zero agentów, zero liczników). Modele
 dodajesz do niego:
 
-- Wejdź we wpis integracji i wybierz **Dodaj model**. Każdy podwpis typu `model`
+- Wejdź we wpis integracji i wybierz **Dodaj model** — lista otwiera się w kolejności
+  ustawionej opcją *Sortowanie listy modeli*. Każdy podwpis typu `model`
   dostaje własnego agenta Assist (encja `conversation.*`, wybieralna w Assist
   i w pipeline'ach po entity_id), własną encję AI Task oraz własne urządzenie
   z sensorami kosztu, tokenów, zapytań i cen. Modeli możesz dodać dowolnie wiele

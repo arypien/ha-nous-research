@@ -19,6 +19,8 @@ AI Task, and keep an honest local tally of what you spend.
 - **Live model catalog** — every price, context length and modality comes from
   `/v1/models`; no model id is hardcoded. A model that leaves the catalog raises a
   repair issue instead of failing every call.
+- **Cheapest first** — the model dropdown is sorted by price by default (free models
+  on top), and the order is yours to pick: price up, price down, name or newest.
 
 You need an API key from [portal.nousresearch.com](https://portal.nousresearch.com) —
 everything else is configured in the UI.

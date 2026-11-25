@@ -506,3 +506,20 @@ async def test_subentry_still_hard_fails_on_a_bad_key(hass: HomeAssistant) -> No
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
     assert not hass.config_entries.async_get_entry(entry.entry_id).subentries
+
+
+async def test_subentry_hard_fails_when_the_network_is_down(
+    hass: HomeAssistant,
+) -> None:
+    """A connection failure is an account-level error, not a model refusal."""
+    entry = _mock_entry(hass)
+    FakeClient.probe_errors = {OTHER_MODEL: NousConnectionError("network down")}
+
+    result = await _async_start_subentry(hass, entry)
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {CONF_CHAT_MODEL: OTHER_MODEL}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert not hass.config_entries.async_get_entry(entry.entry_id).subentries

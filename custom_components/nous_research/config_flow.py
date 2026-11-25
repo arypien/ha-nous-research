@@ -242,7 +242,10 @@ async def _async_probe(
         return "no_credits", str(err)
     except NousRateLimitError as err:
         return "rate_limited", str(err)
-    except (NousConnectionError, NousApiError) as err:
+    except NousConnectionError as err:
+        # Network trouble says nothing about this one model: fail the form.
+        return "cannot_connect", str(err)
+    except NousApiError as err:
         _LOGGER.warning("Nous API refused the test request for %s: %s", model, err)
         return "model_unavailable", str(err)
     except Exception as err:  # noqa: BLE001

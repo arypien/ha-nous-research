@@ -9,8 +9,9 @@
   1-token probe with a 4xx while neighbouring models answer fine, so the add used
   to end in a generic "cannot connect". Such a model now opens a confirmation step
   that quotes the API's own message and, if you accept, stores exactly the id you
-  picked. A bad key (`invalid_auth`), empty balance (`no_credits`) or rate limit
-  (`rate_limited`) still fails hard — those are account problems, not model problems.
+  picked. A bad key (`invalid_auth`), empty balance (`no_credits`), a rate limit
+  (`rate_limited`) or a dead connection (`cannot_connect`) still fails hard — those are
+  account problems, not model problems.
 - **The dropdown starts on a placeholder row**, `— choose a model —`. Version 0.1.4
   left the field without a default, but Home Assistant preselects the first option
   of a dropdown, so the picker still showed the first catalog entry. Now the first

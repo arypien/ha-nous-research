@@ -22,6 +22,7 @@ from custom_components.nous_research import (
     _model_issue_id,
     async_migrate_entry,
 )
+from custom_components.nous_research.api import NousAuthError
 from custom_components.nous_research.config_flow import LLM_API_ASSIST
 from custom_components.nous_research.conversation import NousConversationEntity
 from custom_components.nous_research.sensor import _price_per_mtok
@@ -510,3 +511,34 @@ async def test_conversation_agent_per_model(hass: HomeAssistant) -> None:
     assert agent._settings[CONF_LLM_HASS_API] == LLM_API_ASSIST
     # No agent is registered for the account itself.
     assert conversation.async_get_agent(hass, entry.entry_id) is None
+
+
+class RevokedKeyClient(FakeClient):
+    """Client whose catalog call is answered with 401/403."""
+
+    async def async_list_models(self) -> list[dict[str, Any]]:
+        raise NousAuthError("401 Unauthorized: invalid_api_key")
+
+
+async def test_a_revoked_key_starts_the_reauth_flow(hass: HomeAssistant) -> None:
+    """A dead key must ask for a new one instead of retrying setup forever."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=2,
+        data=_entry_data(),
+        options=_entry_options(),
+        title="Nous Research",
+        subentries_data=[_model_subentry().as_dict()],
+    )
+    entry.add_to_hass(hass)
+
+    with patch("custom_components.nous_research.NousClient", RevokedKeyClient):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    reauth = [flow for flow in flows if flow["context"].get("source") == "reauth"]
+    assert len(reauth) == 1
+    assert reauth[0]["context"]["entry_id"] == entry.entry_id

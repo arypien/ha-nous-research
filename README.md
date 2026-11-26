@@ -9,7 +9,7 @@
   <a href="https://github.com/hacs/integration"><img alt="HACS custom repository" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
   <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-97%20passing-3DA639.svg?style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-104%20passing-3DA639.svg?style=flat-square">
   <img alt="Translations" src="https://img.shields.io/badge/i18n-EN%20%7C%20PL-8A63D2.svg?style=flat-square">
 </p>
 

@@ -123,7 +123,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: NousConfigEntry) -> bool
         try:
             return await client.async_list_models()
         except NousAuthError as err:
-            raise UpdateFailed(f"Authentication failed: {err}") from err
+            # A revoked or wrong key must start the reauth flow (async_step_reauth)
+            # instead of failing setup on every retry.
+            raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
         except NousConnectionError as err:
             raise UpdateFailed(f"Error communicating with the Nous API: {err}") from err
         except (NousPaymentRequiredError, NousRateLimitError, NousApiError) as err:

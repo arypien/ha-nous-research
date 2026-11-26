@@ -49,11 +49,11 @@ _LOGGER = logging.getLogger(__name__)
 # Device names are free text; keep them short enough for the registry UI.
 _DEVICE_NAME_MAX: Final = 120
 
-# The API client pre-fills this to force models into a reasoning block.
-PREFILL_THINKING = " thinking"
+# The API client pre-fills this so a model starts inside a reasoning block.
+PREFILL_THINKING = "<think>"
 
 # Tags some models emit inline instead of using a dedicated field.
-THINKING_OPEN_TAGS = (" thinking", "<thinking>")
+THINKING_OPEN_TAGS = ("<think>", "<thinking>")
 THINKING_CLOSE_TAGS = ("</think>", "</thinking>")
 
 

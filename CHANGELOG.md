@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.5
+
+**Two review findings fixed: the reasoning tags had lost their brackets, and a dead key
+never asked for a new one.**
+
+- **The reasoning tags are real tags again.** `PREFILL_THINKING`, `THINKING_OPEN_TAGS`
+  and the documented prompt in `const.py` carried ` think` instead of `<think>`. That
+  was not cosmetic: `_split_reasoning()` switches to reasoning as soon as a chunk has
+  the opening tag, so a normal reply like "I'm thinking the hallway light is still on"
+  was cut after "I'm" and the rest of the sentence went into `thinking_content`. The
+  prefill mode was worse - the assistant turn was prefilled with ` think`, the model was
+  not inside a think block, rarely emitted `</think>`, and the whole answer ended up
+  as thinking.
+- **A revoked key starts the reauth flow.** The catalog coordinator turned
+  `NousAuthError` into `UpdateFailed`, so a `401`/`403` sent the entry into an endless
+  retry loop and `async_step_reauth` never ran - while the README promised a reauth on
+  exactly those codes. It now raises `ConfigEntryAuthFailed`.
+- New `tests/test_reasoning.py` builds the expected tags from code points, so the test
+  cannot be rewritten by the same mishap that broke the constants: it pins the prefill
+  tag, the documented prompt, prose that merely says "thinking", an inline block, the
+  prefill round trip and a closing tag cut in half by streaming. Plus
+  `test_a_revoked_key_starts_the_reauth_flow`. All of them fail on 0.1.4 and pass now -
+  104 tests.
+
 ## 0.1.4
 
 **The model list got honest — no guessed model, real prices, cheapest first.**

@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/hacs/integration"><img alt="Repozytorium własne HACS" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
+  <a href="https://github.com/hacs/integration"><img alt="Repozytorium HACS" src="https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=flat-square"></a>
   <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
   <a href="LICENSE"><img alt="Licencja MIT" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
   <img alt="Testy" src="https://img.shields.io/badge/testy-104%20passing-3DA639.svg?style=flat-square">
@@ -51,10 +51,12 @@ liczy się na Twojej instancji.
 
 ### HACS (zalecane)
 
-1. HACS → **Integracje** → ⋮ → **Repozytoria własne**.
-2. Dodaj `https://github.com/arypien/ha-nous-research`, kategoria **Integration**.
-3. Wyszukaj **Nous Research** w HACS i zainstaluj.
-4. Zrestartuj Home Assistant.
+Nous Research jest w domyślnym katalogu HACS, więc repozytorium własne nie jest
+potrzebne:
+
+1. HACS → **Integracje**.
+2. Wyszukaj **Nous Research** i zainstaluj.
+3. Zrestartuj Home Assistant.
 
 ### Ręcznie
 

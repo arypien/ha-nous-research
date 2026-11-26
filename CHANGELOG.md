@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.6
+
+**In the HACS default catalog - and the install steps now say so.**
+
+- `README.md` and `README.pl.md` lead with *HACS -> Integrations -> search for Nous
+  Research*; nobody is sent through *Custom repositories* any more, and the HACS badge
+  reads Default instead of Custom. Manual installation from the release ZIP stays for
+  people who do not use HACS.
+- No change to the integration itself: same code as 0.1.5, same 104 tests.
+
 ## 0.1.5
 
 **Two review findings fixed: the reasoning tags had lost their brackets, and a dead key

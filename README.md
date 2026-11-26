@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/hacs/integration"><img alt="HACS custom repository" src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=flat-square"></a>
+  <a href="https://github.com/hacs/integration"><img alt="HACS default repository" src="https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=flat-square"></a>
   <img alt="Home Assistant 2026.9.0+" src="https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-18BCF2.svg?style=flat-square">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3DA639.svg?style=flat-square"></a>
   <img alt="Tests" src="https://img.shields.io/badge/tests-104%20passing-3DA639.svg?style=flat-square">
@@ -50,10 +50,11 @@ tokens and spend computed on your own instance.
 
 ### HACS (recommended)
 
-1. HACS → **Integrations** → ⋮ → **Custom repositories**.
-2. Add `https://github.com/arypien/ha-nous-research`, category **Integration**.
-3. Search for **Nous Research** in HACS and install it.
-4. Restart Home Assistant.
+Nous Research ships in the HACS default catalog, so no custom repository is needed:
+
+1. HACS → **Integrations**.
+2. Search for **Nous Research** and install it.
+3. Restart Home Assistant.
 
 ### Manual
 
